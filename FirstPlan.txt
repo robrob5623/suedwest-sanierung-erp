@@ -1,0 +1,501 @@
+Context
+
+SüdWest Sanierung (SWS) is a German property-damage restoration company (water, fire, mold, storm) that currently runs on Trello boards + Softr/Airtable/Make. They need two interconnected systems built from scratch on a custom stack (Next.js 14, Supabase, tRPC, n8n):
+
+
+
+Schadenradar — a multi-tenant SaaS portal where external partners (Hausverwaltungen, Versicherungen, Makler, etc.) can submit and track damage claims in real time
+
+SWS ERP — an internal operations system covering 20+ modules (project management, offers, invoices, disposition, inventory, HR, fleet, etc.)
+
+
+
+Developer: Solo + Claude Code. Hosting: EU-preferred (Vercel EU + Supabase EU). Domain: schadenradar.de (owned), ERP domain TBD.
+
+
+
+1. Framework Inconsistencies Found
+
+These must be resolved before coding begins:
+
+1.1 Role Model Conflict (CRITICAL)
+
+
+
+A1 domain model defines: SYSTEM_ADMIN, PROJEKTLEITER, INNENDIENST, MULTIPLIKATOR_ADMIN, MULTIPLIKATOR_USER, SACHVERSTAENDIGER
+
+Schadenradar Framework defines: SYSTEM_ADMIN, TENANT_ADMIN, MEMBER, VIEWER, REVIEWER, INTEGRATION
+
+A2 DB schema uses the A1 roles in SQL ENUMs
+
+Decision: Use Schadenradar Framework roles (per user input). The A2 SQL ENUMs and all RLS policies must be rewritten to match.
+
+
+
+1.2 RBAC Policy Conflicts
+
+
+
+Framework Section B has claim_reviewers table referenced in RLS but never defined in A2 schema
+
+A2 schema has claim_assignments with claim_assignment_role ENUM but Framework uses claim_reviewers
+
+Fix: Add claim_reviewers table OR extend claim_assignments with a REVIEWER role
+
+
+
+1.3 Duplicate/Conflicting Table Definitions
+
+
+
+Documents table: A2 schema has ocr_status ENUM with COMPLETED, Framework has DONE — pick one
+
+Documents table: A2 has ocr_assignment_status, Framework has match_status — different names, same concept
+
+Events table: A2 calls it events, Framework calls it timeline_events — different field sets
+
+Folders table: A2 has document_folders with folder_type ENUM, Framework section E has folders with folder_type VARCHAR
+
+Offer/Invoice: A2 has separate offers and invoices tables, Framework section C merges them as OFFER/INVOICE single entity
+
+Fix: Use A2 schema as base (it's more complete SQL), align naming to Framework where clearer
+
+
+
+1.4 Status ENUM Conflicts
+
+
+
+A2: phase_status includes NICHT_BEGONNEN as initial state
+
+Framework: Status machine starts at TERMIN_OFFEN
+
+Fix: Keep NICHT_BEGONNEN — it's the pre-activation state before a phase starts
+
+
+
+1.5 Priority ENUM Difference
+
+
+
+A1/A2: NIEDRIG, NORMAL, HOCH, KRITISCH (German)
+
+Framework: NORMAL, HIGH, CRITICAL (English, missing LOW)
+
+Fix: Use German ENUMs from A2 (consistency with domain language)
+
+
+
+1.6 DocumentType ENUM Difference
+
+
+
+A2: 7 types (FOTO, PROTOKOLL, ANGEBOT, RECHNUNG, GUTACHTEN, KORRESPONDENZ, SONSTIGE)
+
+Framework: 13 types (includes phase-specific: LO_PROTOKOLL, LB_PROTOKOLL, TROCKNUNGSPROTOKOLL, etc.)
+
+Fix: Use Framework's richer ENUM (it's needed for OCR auto-classification)
+
+
+
+1.7 Missing Tables in A2
+
+
+
+ocr_extractions — referenced in Framework but not in A2 DDL
+
+match_decisions — referenced in Framework but not in A2 DDL
+
+notification_preferences — referenced in Framework section I but not in A2
+
+Fix: Add these during schema creation
+
+
+
+1.8 ERP Patch v1 Role Model vs Everything Else
+
+
+
+ERP Patch v1 introduces 11 operational roles (AZUBI, BAUHELFER, FACHARBEITER, VORARBEITER, BAULEITER, PROJEKTLEITER, SCHADENMANAGER, LOGISTIK, EINKAUF, HR, GESCHAEFTSLEITUNG)
+
+These are completely separate from the Schadenradar portal roles
+
+Fix: Two separate role systems — Schadenradar portal roles for external users, ERP operational roles for internal users. Unified users table with a system field to distinguish context.
+
+
+
+
+
+2. What You Need to Provide Before Building
+
+2.1 Required from you (before Phase 0 starts)
+
+ItemWhyFormatAirtable export (all bases)Data migration to SupabaseCSV or JSON exportSWS Logo filesUI implementationSVG + PNG (light/dark variants)schadenradar.de DNS accessDomain setup for VercelIONOS login or nameserver delegationSupabase account createdBackend infrastructureCreate at supabase.com (pick EU region: Frankfurt)Vercel account createdFrontend hostingCreate at vercel.comAzure accountOCR (Document Intelligence)Create at portal.azure.com (West Europe region)Resend accountTransactional emailCreate at resend.com
+
+2.2 Required before Phase 2 (ERP Sync)
+
+ItemWhyFormatn8n instance decisionWorkflow automationSelf-hosted (Docker) or n8n CloudERP API specification (if any existing API)Integration layerOpenAPI spec or documentationSample documents (10-20)OCR model tuningPDFs of LO-Protokolle, Angebote, Rechnungen, GutachtenStripe/payment provider (if SaaS billing needed)Tenant billingAccount credentials
+
+2.3 Required for each build session with Claude Code
+
+Each time you start a build session, have ready:
+
+
+
+The CLAUDE.md file (generated below)
+
+Access to this repo
+
+Which phase/module you want to work on
+
+Any business rule clarifications that came up
+
+
+
+
+
+3. Architecture
+
+┌─────────────────────────────────────────────────────────────────────┐
+
+│                          MONOREPO (Turborepo)                       │
+
+├──────────────────┬────────────────────┬─────────────────────────────┤
+
+│  apps/portal     │  apps/erp          │  apps/admin                 │
+
+│  (Schadenradar)  │  (SWS ERP)         │  (System Admin)             │
+
+│  Next.js 14      │  Next.js 14        │  Next.js 14                 │
+
+│  External users  │  Internal users    │  SWS ops team               │
+
+├──────────────────┴────────────────────┴─────────────────────────────┤
+
+│                      packages/shared                                │
+
+│  ├── db (Prisma/Drizzle schema, migrations, seed)                  │
+
+│  ├── auth (Supabase auth helpers, RBAC logic)                      │
+
+│  ├── types (shared TypeScript types, enums, zod schemas)           │
+
+│  ├── ui (shared shadcn components, design tokens)                  │
+
+│  └── trpc (shared tRPC routers, middleware)                        │
+
+├─────────────────────────────────────────────────────────────────────┤
+
+│                    SUPABASE (EU - Frankfurt)                        │
+
+│  PostgreSQL │ Auth │ Storage │ Realtime │ Edge Functions            │
+
+├─────────────────────────────────────────────────────────────────────┤
+
+│                   EXTERNAL SERVICES                                 │
+
+│  n8n (workflows) │ Azure Doc Intelligence (OCR) │ Resend (email)   │
+
+└─────────────────────────────────────────────────────────────────────┘
+
+Key decision: Monorepo with Turborepo. Portal and ERP share the same database, auth system, and component library but are separate Next.js apps. This lets you build both in parallel without code conflicts.
+
+
+
+4. Build Phases & Steps
+
+Phase 0: Project Scaffolding (Day 1-2)
+
+Input needed from you: Supabase + Vercel accounts created
+
+StepWhat Claude Code buildsYour input0.1Turborepo monorepo setup (apps/portal, apps/erp, packages/*)None0.2Supabase project init (EU Frankfurt)Supabase project URL + keys0.3Unified DB schema (resolved from A2 + Framework + patches)Approve schema0.4Supabase Auth config (email + magic link)None0.5Tailwind config with SWS design tokensLogo SVG file0.6Shadcn/UI base components installedNone0.7tRPC setup with Supabase clientNone0.8CLAUDE.md + .env.example committedNone0.9CI: GitHub Actions (lint, type-check, build)None
+
+Phase 1: Schadenradar MVP (Weeks 1-4)
+
+Goal: Replace Trello boards for 1-2 pilot Multiplikatoren
+
+StepWhat gets builtFiles1.1Auth flow (login, register, magic link, session)apps/portal/app/(auth)/*1.2Tenant + User management (SYSTEM_ADMIN)packages/trpc/routers/admin.ts1.3Claim CRUD + 5-phase modelpackages/trpc/routers/claims.ts, apps/portal/app/claims/*1.4Map view (Leaflet + CartoDB tiles + clustering)apps/portal/components/radar-map.tsx1.5List + Board viewsapps/portal/app/claims/page.tsx1.6Claim detail page (overview, phases, contacts)apps/portal/app/claims/[id]/*1.7Document upload + folder auto-creationpackages/trpc/routers/documents.ts1.8Timeline / Activity logapps/portal/components/timeline.tsx1.9Comments + @mentionspackages/trpc/routers/comments.ts1.10Traffic light calculation (SLA logic)packages/shared/services/traffic-light.ts1.11In-app notifications (Supabase Realtime)packages/trpc/routers/notifications.ts1.12RLS policies (multi-tenant isolation)packages/db/migrations/002_rls.sql1.13PWA manifest + responsive layoutapps/portal/public/manifest.json1.14Seed data + E2E tests (Playwright)packages/db/seed.ts, apps/portal/e2e/*
+
+Phase 2: ERP Core (Weeks 3-8, parallel with Phase 1 tail)
+
+Goal: Core internal ERP replacing Airtable for daily operations
+
+StepWhat gets builtERP Module2.1ERP auth + internal role system (11 roles)M012.2Project (SCHADEN_PROJEKT) CRUD + KanbanM032.3Offer module (titles, positions, catalog, approval)M062.4Invoice module (from offer, manual, correction, Festschreibung)M112.5Time tracking (desktop + mobile PWA)M042.6Material / MBL (Materialbestellliste)M092.7DMS (document management, timeline, audit)M152.8Task system + PL dashboard (Ampel, Kanban, KPIs)M052.9Airtable data migration scriptOne-time
+
+Phase 3: Integration Layer (Weeks 7-10)
+
+Goal: Connect Schadenradar to ERP, add OCR
+
+StepWhat gets built3.1n8n setup + ERP→Portal status sync webhook3.2ERP→Portal data sync (claims, contacts, calendar, offers/invoices)3.3Portal→ERP sync (comments, documents)3.4Azure Document Intelligence OCR pipeline3.5OCR matching engine + auto-assignment3.6Review queue UI (Document Inbox)3.7Censored timeline (internal vs external visibility)3.8Email notifications via Resend + n8n
+
+Phase 4: ERP Extended Modules (Weeks 9-16)
+
+Goal: Full ERP functionality from Patch v1
+
+StepERP Module4.1Disposition + Teamkalender (M16)4.2Quality checks + room labels (M07)4.3Inventory + barcode/QR (M09+)4.4Mietservice + device lifecycle (M20)4.5Container + disposal (M21)4.6Einkauf (purchasing) module (M11+)4.7Logistik + Fuhrpark (M12)4.8HR module (M14)4.9Newsletter / Weekly Customer Update (M19)4.10Schadenmanager superdashboard (M13)
+
+Phase 5: Statistics, Polish & Launch (Weeks 15-18)
+
+StepWhat gets built5.1KPI dashboard (10 KPIs from Framework section K)5.2Export functions (CSV, XLSX)5.3DSGVO compliance (data export, deletion, retention)5.4Security audit (RLS, CORS, rate limiting, input validation)5.5Performance optimization (materialized views, edge caching)5.6User acceptance testing with pilot Multiplikatoren5.7Production deployment + monitoring setup
+
+
+
+5. Infrastructure & Hosting
+
+Production Stack
+
+ServiceProviderRegionCost EstimateFrontend (Portal)Vercel ProEU (fra1)~$20/moFrontend (ERP)Vercel ProEU (fra1)(same plan)Database + Auth + StorageSupabase ProEU (Frankfurt)~$25/moWorkflow Automationn8n Cloud or Self-hostedEU$20/mo or freeOCRAzure Document IntelligenceWest Europe~$0.01/pageEmailResend-Free tier (3k/mo)DomainIONOS (schadenradar.de)-Already ownedTotal (start)~$65-85/mo
+
+Security Checklist for Shipping
+
+
+
+ All Supabase RLS policies tested with multiple tenant contexts
+
+ CORS restricted to production domains only
+
+ Rate limiting on auth + API endpoints (Supabase built-in + Vercel)
+
+ All secrets in Vercel env vars, never in code
+
+ HTTPS everywhere (Vercel default)
+
+ Content Security Policy headers
+
+ Input validation via Zod on all tRPC procedures
+
+ File upload: MIME type validation, 50MB limit, virus scan (ClamAV via n8n)
+
+ DSGVO: cookie consent, privacy policy, data export endpoint
+
+ Audit logging on all sensitive operations
+
+ Supabase service role key NEVER exposed to client
+
+ Regular dependency updates (Dependabot)
+
+
+
+
+
+6. Proposed CLAUDE.md
+
+This file goes in the repo root and instructs Claude Code on project conventions:
+
+markdown# SüdWest Sanierung — Schadenradar + ERP
+
+
+
+## Project Overview
+
+Multi-tenant SaaS platform (Schadenradar) + internal ERP for a German property-damage restoration company. Built with Next.js 14, Supabase, tRPC, Shadcn/UI, TailwindCSS.
+
+
+
+## Tech Stack
+
+- **Monorepo:** Turborepo
+
+- **Frontend:** Next.js 14 (App Router), React 18, TypeScript strict
+
+- **UI:** Shadcn/UI + TailwindCSS (design tokens in tailwind.config.ts)
+
+- **Backend:** Supabase (PostgreSQL, Auth, Storage, Realtime, Edge Functions)
+
+- **API Layer:** tRPC v11 (end-to-end type safety)
+
+- **Automation:** n8n (self-hosted or cloud)
+
+- **OCR:** Azure Document Intelligence
+
+- **Email:** Resend
+
+- **Deployment:** Vercel (EU) + Supabase (EU Frankfurt)
+
+- **Testing:** Vitest (unit), Playwright (E2E)
+
+
+
+## Repository Structure
+
+apps/
+
+portal/          # Schadenradar (external SaaS portal)
+
+erp/             # SWS ERP (internal operations)
+
+admin/           # System administration
+
+packages/
+
+db/              # Database schema, migrations, seed
+
+auth/            # Auth helpers, RBAC
+
+types/           # Shared TypeScript types, Zod schemas
+
+ui/              # Shared UI components
+
+trpc/            # Shared tRPC routers
+
+
+
+## Coding Conventions
+
+- Language: TypeScript strict mode, no `any`
+
+- UI text: German (this is a German-market product)
+
+- Code/variables/comments: English
+
+- ENUM values: German SCREAMING_SNAKE_CASE (e.g., `WASSERSCHADEN`, `TERMIN_OFFEN`)
+
+- Database: snake_case for columns, PascalCase for ENUMs
+
+- Components: PascalCase files, named exports
+
+- Use Zod for all input validation
+
+- Use `TIMESTAMPTZ` (not `TIMESTAMP`) for all time fields
+
+- Every table gets `created_at` and `updated_at` with trigger
+
+- Every tenant-scoped table gets redundant `tenant_id` for RLS performance
+
+
+
+## Role Systems
+
+### Schadenradar Portal Roles
+
+SYSTEM_ADMIN, TENANT_ADMIN, MEMBER, VIEWER, REVIEWER, INTEGRATION
+
+
+
+### ERP Internal Roles
+
+GESCHAEFTSLEITUNG, PROJEKTLEITER, SCHADENMANAGER, BAULEITER, VORARBEITER, FACHARBEITER, BAUHELFER, AZUBI, LOGISTIK, EINKAUF, HR, CONTROLLING, FIB
+
+
+
+## Key Business Rules
+
+- ERP is Source of Truth for all operational data
+
+- Schadenradar is a VIEW layer — it reads from ERP, writes only comments/documents/claims
+
+- 5 damage phases: Leckortung → Leckagebehebung → Rückbau → Trocknung → Wiederherstellung
+
+- Each phase follows the same 10-step status machine (NICHT_BEGONNEN through ABGESCHLOSSEN)
+
+- Traffic light: GREEN (on track), YELLOW (at risk), RED (overdue/blocked)
+
+- Multi-tenant: Multiplikatoren see ONLY their own data (enforced via Supabase RLS)
+
+- No prices visible to roles below PROJEKTLEITER
+
+- All state changes require audit trail
+
+- No-Silent-Failure: every automation must log success or create an error task
+
+
+
+## Design System
+
+- Primary: #84bc47 (SWS Green)
+
+- Gray: #6f6f6f
+
+- Background: #f2f0ec
+
+- Font: Inter
+
+- Light mode only (no dark mode)
+
+- Cards: rounded-lg, shadow-sm
+
+- Sidebar: 256px fixed
+
+
+
+## Before Each Session
+
+1. Run `pnpm install` if packages changed
+
+2. Check `packages/db/migrations/` for pending migrations
+
+3. Run `pnpm dev` to start all apps
+
+4. Run `pnpm typecheck` before committing
+
+
+
+## Testing
+
+- Unit tests: `pnpm test`
+
+- E2E tests: `pnpm e2e`
+
+- Type check: `pnpm typecheck`
+
+- Lint: `pnpm lint`
+
+
+
+7. Verification Plan
+
+After each phase, verify with these checks:
+
+Phase 0 (Scaffolding)
+
+
+
+pnpm build succeeds for all apps
+
+Supabase migrations apply cleanly
+
+Auth login/logout works
+
+RLS blocks cross-tenant data access
+
+
+
+Phase 1 (Schadenradar MVP)
+
+
+
+Create claim → appears on map with correct traffic light color
+
+Upload document → auto-creates folder structure, file accessible
+
+Post comment with @mention → notification appears
+
+Login as Tenant A → cannot see Tenant B claims
+
+Mobile (375px width) → layout works, bottom nav visible
+
+
+
+Phase 3 (Integration)
+
+
+
+ERP status change webhook → Portal status updates within 5s
+
+Upload PDF → OCR extracts project number → auto-assigns to correct claim
+
+Same document uploaded twice → deduplication catches it
+
+
+
+Phase 5 (Launch)
+
+
+
+KPI dashboard loads in <2s
+
+100 concurrent users → response times <500ms
+
+DSGVO data export → generates complete user data JSON
+
+Pentest: SQL injection, XSS, IDOR all blocked
