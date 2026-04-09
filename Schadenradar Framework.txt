@@ -1,0 +1,3752 @@
+# Schadenradar – Implementation-Ready Framework & Blueprint
+
+**Version:** 1.0.0
+**Datum:** Januar 2025
+**Autor:** Product & Solution Architecture
+**Status:** Draft for Engineering Review
+
+---
+
+## Inhaltsverzeichnis
+
+- [A) Produktdefinition](#a-produktdefinition)
+- [B) Rollen & Rechte (RBAC)](#b-rollen--rechte-rbac)
+- [C) Datenmodell (Domain-driven)](#c-datenmodell-domain-driven)
+- [D) Statusmodell & Ampellogik](#d-statusmodell--ampellogik)
+- [E) Digitale Schadenakte](#e-digitale-schadenakte)
+- [F) Screens / UI Informationsarchitektur](#f-screens--ui-informationsarchitektur)
+- [G) Integrations- & Sync-Konzept (ERP first)](#g-integrations---sync-konzept-erp-first)
+- [H) OCR & Dokument-Automation](#h-ocr--dokument-automation)
+- [I) Benachrichtigungen & Kommunikation](#i-benachrichtigungen--kommunikation)
+- [J) Sicherheit, Compliance, Audit](#j-sicherheit-compliance-audit)
+- [K) KPI/Statistik-Definitionen](#k-kpistatistik-definitionen)
+- [L) Releaseplan](#l-releaseplan)
+- [M) Offene Fragen / Annahmen / Risiken](#m-offene-fragen--annahmen--risiken)
+
+---
+
+## A) Produktdefinition
+
+### A.1 Vision
+
+> **Schadenradar** ist das zentrale Operations-Dashboard für Multiplikatoren im Schadenmanagement. Es ersetzt fragmentierte Kommunikation (E-Mail, Telefon, Trello) durch eine einheitliche, kartenbasierte Echtzeitübersicht aller Schadenfälle mit automatischer Dokumentenverarbeitung.
+
+### A.2 Strategische Ziele
+
+| Ziel | Metriken | Zeithorizont |
+|------|----------|--------------|
+| **Transparenz** | 100% Echtzeit-Statusvisibilität für Multiplikatoren | MVP |
+| **Effizienz** | -50% manuelle Dokumenten-Zuordnung durch OCR-Automation | Phase 1 |
+| **Single Source of Truth** | 0% Datenredundanz durch ERP-First-Architektur | Phase 2 |
+| **Self-Service** | 80% Self-Service-Quote für Status-Abfragen | MVP |
+| **Compliance** | 100% Audit-Trail-Abdeckung | MVP |
+
+### A.3 Non-Goals (explizit ausgeschlossen)
+
+- ❌ **Keine ERP-Ersatzfunktion** – Schadenradar ist Viewer/Kollaborationsschicht, nicht Datenhaltung
+- ❌ **Keine Finanzbuchhaltung** – Angebote/Rechnungen werden angezeigt, nicht verwaltet
+- ❌ **Keine Terminplanung** – Kalender ist read-only Sync vom ERP
+- ❌ **Kein Dark Mode** (MVP) – Corporate Design ist Light Mode
+- ❌ **Keine native Mobile App** (MVP) – PWA first
+- ❌ **Keine Multi-Language** (MVP) – Deutsch only
+
+### A.4 Zielgruppen & Personas
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        MULTIPLIKATOREN                              │
+├─────────────────┬───────────────────┬───────────────────────────────┤
+│ Hausverwaltung  │ Versicherungs-    │ Sachverständige /             │
+│                 │ makler/-agentur   │ Schadenregulierer             │
+├─────────────────┼───────────────────┼───────────────────────────────┤
+│ • 10-500 WE     │ • Endkunden-      │ • Prüft Angebote/Rechnungen   │
+│ • Meldet für    │   betreuung       │ • Benötigt Doku-Zugriff       │
+│   Mieter/ET     │ • Kommunikation   │ • Freigabe-Workflows          │
+│ • Status-       │   mit VN          │ • LO-/LB-Protokolle           │
+│   Tracking      │ • Schadenabwick-  │                               │
+│                 │   lung            │                               │
+├─────────────────┴───────────────────┴───────────────────────────────┤
+│ + Kommunen, Baubiologen, Gewerbliche Auftraggeber                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+<details>
+<summary><strong>Persona-Details (klicken zum Ausklappen)</strong></summary>
+
+#### Persona 1: Hausverwaltung – Maria Müller
+
+- **Rolle:** Objektverwalter, 120 Wohneinheiten
+- **Pain Points:** Unübersichtlichkeit bei parallelen Schäden, Rückfragen von Eigentümern
+- **Kern-Need:** Sofortiger Status-Überblick, automatische Benachrichtigung bei Milestones
+- **Nutzungsfrequenz:** Täglich, Desktop
+
+#### Persona 2: Versicherungsagentur – Thomas Weber
+
+- **Rolle:** Agenturinhaber, 2.000 Kunden
+- **Pain Points:** Keine Visibility in Bearbeitungsstand, manuelles Nachfragen
+- **Kern-Need:** Schnelle Statusauskunft für Kunden, Dokumentendownload
+- **Nutzungsfrequenz:** Mehrmals wöchentlich, Desktop + Mobile
+
+#### Persona 3: Sachverständiger – Dr. Klaus Schmidt
+
+- **Rolle:** Freier Gutachter, prüft LO-Protokolle + Angebote
+- **Pain Points:** Manuelle Dokumentensammlung, fehlende Freigabe-Übersicht
+- **Kern-Need:** Inbox "Was muss ich prüfen?", strukturierte Schadenakte
+- **Nutzungsfrequenz:** Täglich, Desktop
+
+</details>
+
+### A.5 Kern-Usecases
+
+| UC-ID | Usecase | Primärer Akteur | Priorität |
+|-------|---------|-----------------|-----------|
+| UC-01 | Schaden melden (minimal viable) | Multiplikator | P0 |
+| UC-02 | Schadenstatus live einsehen (Karte) | Multiplikator | P0 |
+| UC-03 | Schaden-Details + Timeline einsehen | Multiplikator | P0 |
+| UC-04 | Dokument hochladen (kontextbezogen) | Multiplikator | P0 |
+| UC-05 | Dokument hochladen (global mit Auto-Zuordnung) | Multiplikator | P0 |
+| UC-06 | Kommentar/Nachricht zu Schaden | Multiplikator | P0 |
+| UC-07 | Angebote/Rechnungen einsehen + Freigabe-Status | SV/Regulierer | P1 |
+| UC-08 | Termine einsehen (sync from ERP) | Multiplikator | P1 |
+| UC-09 | Statistiken/KPIs abrufen | Multiplikator-Admin | P2 |
+| UC-10 | Bulk-Zuordnung Review (OCR Inbox) | Multiplikator | P1 |
+
+### A.6 UX-Prinzipien
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    SCHADENRADAR UX MANIFESTO                     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. KARTE IST STARTPUNKT                                        │
+│     → Geographische Orientierung als primäres Mental Model       │
+│     → "Wo brennt es?" sofort sichtbar                           │
+│                                                                  │
+│  2. AMPEL > KOMPLEXITÄT                                         │
+│     → 3 Farben (grün/gelb/rot) für 90% der Entscheidungen       │
+│     → Details on-demand, nicht by-default                       │
+│                                                                  │
+│  3. ZERO MANUAL FILE MANAGEMENT                                 │
+│     → Upload = Done. System assigned automatisch                 │
+│     → Ordnerstruktur für Anzeige, nicht für Navigation          │
+│                                                                  │
+│  4. OPERATIONS DASHBOARD, KEIN SOCIAL FEED                      │
+│     → Fokus: Was muss ich tun? Was blockiert?                   │
+│     → Kein Notification-Overload                                │
+│                                                                  │
+│  5. MOBILE = CONSUMPTION, DESKTOP = COLLABORATION               │
+│     → PWA optimiert für Quick-Check unterwegs                   │
+│     → Komplexe Aktionen auf Desktop                             │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## B) Rollen & Rechte (RBAC)
+
+### B.1 Rollen-Hierarchie
+
+```
+                    ┌─────────────────┐
+                    │  SYSTEM_ADMIN   │  (SWS intern)
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+     ┌────────────────┐ ┌────────────┐ ┌────────────────┐
+     │ TENANT_ADMIN   │ │ REVIEWER   │ │ INTEGRATION    │
+     │ (Multiplikator │ │ (SV/Regu-  │ │ (Service       │
+     │  Hauptkontakt) │ │  lierer)   │ │  Account)      │
+     └───────┬────────┘ └────────────┘ └────────────────┘
+             │
+    ┌────────┴────────┐
+    ▼                 ▼
+┌──────────┐   ┌──────────────┐
+│ MEMBER   │   │ VIEWER       │
+│ (Mitar-  │   │ (Read-only,  │
+│  beiter) │   │  z.B. Mieter)│
+└──────────┘   └──────────────┘
+```
+
+### B.2 Rollendefinitionen
+
+| Rolle | Scope | Beschreibung |
+|-------|-------|--------------|
+| `SYSTEM_ADMIN` | Global | SWS-interne Administration, alle Tenants |
+| `TENANT_ADMIN` | Tenant | Hauptansprechpartner Multiplikator, User-Verwaltung |
+| `MEMBER` | Tenant | Standard-Mitarbeiter des Multiplikators |
+| `VIEWER` | Tenant | Read-only Zugang (z.B. für VN-Selbstauskunft) |
+| `REVIEWER` | Cross-Tenant | Sachverständiger/Regulierer mit Prüf-/Freigaberechten |
+| `INTEGRATION` | Global | Service Account für ERP-Sync |
+
+### B.3 Rechte-Matrix
+
+| Permission | SYS_ADMIN | TENANT_ADMIN | MEMBER | VIEWER | REVIEWER | INTEGRATION |
+|------------|:---------:|:------------:|:------:|:------:|:--------:|:-----------:|
+| **Claims** |
+| `claim:list` | ✅ | ✅ (own tenant) | ✅ | ✅ | ✅ (assigned) | ✅ |
+| `claim:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `claim:create` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `claim:update` | ✅ | ✅ | ⚠️ limited | ❌ | ❌ | ✅ |
+| `claim:delete` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Documents** |
+| `doc:list` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `doc:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `doc:upload` | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| `doc:delete` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| `doc:assign_review` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| **Comments** |
+| `comment:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `comment:create` | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `comment:delete_own` | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Offers/Invoices** |
+| `finance:read` | ✅ | ✅ | ✅ | ⚠️ redacted | ✅ | ✅ |
+| `finance:approve` | ✅ | ⚠️ config | ❌ | ❌ | ✅ | ❌ |
+| **Statistics** |
+| `stats:read` | ✅ | ✅ | ⚠️ limited | ❌ | ⚠️ limited | ❌ |
+| `stats:export` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Admin** |
+| `tenant:manage_users` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `tenant:settings` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `system:global_config` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+**Legende:** ✅ = Vollzugriff | ⚠️ = Eingeschränkt (Details in Policy) | ❌ = Kein Zugriff
+
+### B.4 Row-Level Security Policies (Supabase)
+
+```sql
+-- Tenant Isolation Policy für Claims
+CREATE POLICY "tenant_isolation_claims" ON claims
+    FOR ALL
+    USING (
+        tenant_id = auth.jwt() ->> 'tenant_id'
+        OR 
+        EXISTS (
+            SELECT 1 FROM claim_assignments ca
+            WHERE ca.claim_id = claims.id 
+            AND ca.user_id = auth.uid()
+        )
+        OR
+        auth.jwt() ->> 'role' = 'SYSTEM_ADMIN'
+    );
+
+-- Reviewer Cross-Tenant Access
+CREATE POLICY "reviewer_access_claims" ON claims
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM claim_reviewers cr
+            WHERE cr.claim_id = claims.id
+            AND cr.user_id = auth.uid()
+            AND cr.active = true
+        )
+    );
+
+-- Document Access follows Claim Access
+CREATE POLICY "doc_follows_claim" ON documents
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM claims c
+            WHERE c.id = documents.claim_id
+            AND (
+                c.tenant_id = auth.jwt() ->> 'tenant_id'
+                OR auth.jwt() ->> 'role' = 'SYSTEM_ADMIN'
+            )
+        )
+    );
+```
+
+---
+
+## C) Datenmodell (Domain-driven)
+
+### C.1 Entity Relationship Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              SCHADENRADAR DOMAIN MODEL                                   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐       ┌──────────────┐       ┌──────────────────┐
+│   TENANT     │1     n│    USER      │       │  USER_ROLE       │
+├──────────────┤───────├──────────────┤──────►├──────────────────┤
+│ id           │       │ id           │       │ role_name        │
+│ name         │       │ tenant_id    │       │ permissions[]    │
+│ slug         │       │ email        │       └──────────────────┘
+│ settings     │       │ name         │
+│ created_at   │       │ role         │
+└──────────────┘       │ avatar_url   │
+        │              └──────────────┘
+        │                     │
+        │1                    │n
+        ▼                     ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                           CLAIM                                   │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ tenant_id           UUID FK → Tenant                              │
+│ erp_project_number  VARCHAR (nullable until ERP sync)             │
+│ external_claim_numbers JSONB {insurer, regulator, expert}         │
+│ property_id         UUID FK → Property                            │
+│ current_phase       ENUM (LO, LB, RB, TR, WH)                    │
+│ current_status      ENUM (see Status Model)                       │
+│ priority            ENUM (NORMAL, HIGH, CRITICAL)                 │
+│ flags               JSONB {leckortung_required, ...}              │
+│ damage_description  TEXT                                          │
+│ created_at          TIMESTAMP                                     │
+│ created_by          UUID FK → User                                │
+│ updated_at          TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+        │              │              │              │
+        │1             │1             │1             │n
+        ▼              ▼              ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+│  PROPERTY    │ │   CONTACT    │ │    PHASE     │ │  STATUS_HISTORY  │
+├──────────────┤ ├──────────────┤ ├──────────────┤ ├──────────────────┤
+│ id           │ │ id           │ │ id           │ │ id               │
+│ address      │ │ claim_id     │ │ claim_id     │ │ claim_id         │
+│ city         │ │ type         │ │ phase_type   │ │ phase_id         │
+│ zip          │ │ name         │ │ status       │ │ from_status      │
+│ lat/lng      │ │ phone        │ │ started_at   │ │ to_status        │
+│ building_type│ │ email        │ │ completed_at │ │ changed_at       │
+│ year_built   │ │ role         │ │ sla_deadline │ │ changed_by       │
+│ units        │ │ notify_prefs │ │ erp_substatus│ │ source           │
+│ floor_type   │ └──────────────┘ └──────────────┘ │ erp_event_id     │
+└──────────────┘                                   └──────────────────┘
+                                                          │
+┌──────────────────────────────────────────────────────────────────┐
+│                          TIMELINE_EVENT                           │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ claim_id            UUID FK                                       │
+│ event_type          ENUM (STATUS_CHANGE, COMMENT, DOC_UPLOAD,    │
+│                           APPOINTMENT, APPROVAL, SYSTEM, ...)     │
+│ title               VARCHAR                                       │
+│ description         TEXT (nullable)                               │
+│ metadata            JSONB                                         │
+│ visibility          ENUM (INTERNAL, EXTERNAL, CENSORED)          │
+│ erp_event_id        VARCHAR (nullable, for dedup)                │
+│ created_at          TIMESTAMP                                     │
+│ created_by          UUID FK (nullable for system events)         │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                          DOCUMENT                                 │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ claim_id            UUID FK (nullable for unassigned)            │
+│ folder_id           UUID FK → Folder                              │
+│ tenant_id           UUID FK                                       │
+│ filename            VARCHAR                                       │
+│ storage_path        VARCHAR                                       │
+│ mime_type           VARCHAR                                       │
+│ size_bytes          INTEGER                                       │
+│ doc_type            ENUM (see DocType list)                       │
+│ phase_affinity      ENUM (LO, LB, RB, TR, WH, GENERAL) nullable  │
+│ version             INTEGER DEFAULT 1                             │
+│ parent_version_id   UUID FK (nullable)                           │
+│ ocr_status          ENUM (PENDING, PROCESSING, DONE, FAILED)     │
+│ ocr_extraction_id   UUID FK → OCRExtraction                       │
+│ match_status        ENUM (AUTO, REVIEW, MANUAL, UNASSIGNED)      │
+│ match_confidence    DECIMAL(3,2)                                  │
+│ uploaded_at         TIMESTAMP                                     │
+│ uploaded_by         UUID FK                                       │
+└──────────────────────────────────────────────────────────────────┘
+        │
+        │1
+        ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                        OCR_EXTRACTION                             │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ document_id         UUID FK                                       │
+│ raw_text            TEXT                                          │
+│ extracted_fields    JSONB {project_no, claim_no, address, ...}   │
+│ confidence_scores   JSONB {field: score}                          │
+│ azure_operation_id  VARCHAR                                       │
+│ model_version       VARCHAR                                       │
+│ processing_time_ms  INTEGER                                       │
+│ created_at          TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                        MATCH_DECISION                             │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ document_id         UUID FK                                       │
+│ suggested_claim_id  UUID FK (nullable)                           │
+│ match_score         DECIMAL(3,2)                                  │
+│ match_reasons       JSONB [{criterion, value, score}, ...]       │
+│ status              ENUM (PENDING, ACCEPTED, REJECTED, MANUAL)   │
+│ reviewed_by         UUID FK (nullable)                           │
+│ reviewed_at         TIMESTAMP (nullable)                         │
+│ final_claim_id      UUID FK                                       │
+│ created_at          TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                      CALENDAR_ITEM                                │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ claim_id            UUID FK                                       │
+│ erp_appointment_id  VARCHAR                                       │
+│ type                ENUM (LO, LB, OT, RB, WH, ABNAHME, SONSTIG)  │
+│ title               VARCHAR                                       │
+│ scheduled_start     TIMESTAMP                                     │
+│ scheduled_end       TIMESTAMP                                     │
+│ status              ENUM (PLANNED, CONFIRMED, COMPLETED, CANCELLED)│
+│ location            VARCHAR (nullable, defaults to property)     │
+│ notes               TEXT                                          │
+│ synced_at           TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                    OFFER / INVOICE                                │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ claim_id            UUID FK                                       │
+│ phase_id            UUID FK                                       │
+│ type                ENUM (OFFER, INVOICE)                        │
+│ erp_document_id     VARCHAR                                       │
+│ document_id         UUID FK → Document                            │
+│ number              VARCHAR                                       │
+│ amount_net          DECIMAL(12,2)                                 │
+│ amount_gross        DECIMAL(12,2)                                 │
+│ status              ENUM (DRAFT, SENT, IN_REVIEW, APPROVED,      │
+│                           REJECTED, CORRECTION, PAID)             │
+│ recipient_type      ENUM (INSURER, REGULATOR, OWNER, TENANT, VN) │
+│ cc_recipients       JSONB [{type, contact_id}]                   │
+│ due_date            DATE (nullable)                               │
+│ created_at          TIMESTAMP                                     │
+│ updated_at          TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                  COMMENT / THREAD                                 │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ claim_id            UUID FK                                       │
+│ parent_id           UUID FK (nullable, for threading)            │
+│ author_id           UUID FK → User                                │
+│ content             TEXT                                          │
+│ mentions            UUID[] (user_ids)                             │
+│ attachments         UUID[] (document_ids)                         │
+│ visibility          ENUM (INTERNAL, EXTERNAL)                    │
+│ edited_at           TIMESTAMP (nullable)                         │
+│ created_at          TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                 ERP_SYNC_LOG (Audit)                              │
+├──────────────────────────────────────────────────────────────────┤
+│ id                  UUID PK                                       │
+│ entity_type         VARCHAR (claim, document, event, ...)        │
+│ entity_id           UUID                                          │
+│ erp_entity_id       VARCHAR                                       │
+│ direction           ENUM (ERP_TO_PORTAL, PORTAL_TO_ERP)          │
+│ operation           ENUM (CREATE, UPDATE, DELETE)                │
+│ payload_hash        VARCHAR (for idempotency)                     │
+│ status              ENUM (SUCCESS, FAILED, CONFLICT)             │
+│ error_message       TEXT (nullable)                               │
+│ synced_at           TIMESTAMP                                     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### C.2 Enums & Value Objects
+
+```typescript
+// types/domain.ts
+
+export enum ClaimPhase {
+  LO = 'LECKORTUNG',
+  LB = 'LECKAGEBEHEBUNG', 
+  RB = 'RUECKBAU',
+  TR = 'TROCKNUNG',
+  WH = 'WIEDERHERSTELLUNG'
+}
+
+export enum PortalStatus {
+  TERMIN_OFFEN = 'TERMIN_OFFEN',
+  TERMIN_GEPLANT = 'TERMIN_GEPLANT',
+  VOR_ORT_ERFOLGT = 'VOR_ORT_ERFOLGT',
+  DOKUMENTATION = 'DOKUMENTATION',
+  FREIGABE_AUSSTEHEND = 'FREIGABE_AUSSTEHEND',
+  IN_DURCHFUEHRUNG = 'IN_DURCHFUEHRUNG',
+  ABNAHME = 'ABNAHME',
+  ABRECHNUNG = 'ABRECHNUNG',
+  ABGESCHLOSSEN = 'ABGESCHLOSSEN'
+}
+
+export enum DocumentType {
+  // Allgemein
+  SCHADENMELDUNG = 'SCHADENMELDUNG',
+  VOLLMACHT = 'VOLLMACHT',
+  KORRESPONDENZ = 'KORRESPONDENZ',
+  FOTO = 'FOTO',
+  
+  // Phase-spezifisch
+  LO_PROTOKOLL = 'LO_PROTOKOLL',
+  LB_PROTOKOLL = 'LB_PROTOKOLL',
+  TROCKNUNGSPROTOKOLL = 'TROCKNUNGSPROTOKOLL',
+  MESSWERTE = 'MESSWERTE',
+  ABNAHMEPROTOKOLL = 'ABNAHMEPROTOKOLL',
+  
+  // Finanzdokumente
+  ANGEBOT = 'ANGEBOT',
+  RECHNUNG = 'RECHNUNG',
+  GUTACHTEN = 'GUTACHTEN',
+  
+  // Sonstige
+  SONSTIGES = 'SONSTIGES'
+}
+
+export enum Priority {
+  NORMAL = 'NORMAL',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL'
+}
+
+export enum TrafficLight {
+  GREEN = 'GREEN',   // On track
+  YELLOW = 'YELLOW', // At risk
+  RED = 'RED'        // Critical/blocked
+}
+```
+
+### C.3 Validierungsregeln
+
+| Entity | Field | Validation |
+|--------|-------|------------|
+| Claim | `property_id` | Required |
+| Claim | `erp_project_number` | Optional on create, pattern `/^P\d{6}$/` |
+| Property | `address` | Required, min 5 chars |
+| Property | `zip` | Pattern `/^\d{5}$/` |
+| Property | `lat/lng` | Optional, valid coordinates if set |
+| Contact | `email` | Valid email format |
+| Contact | `phone` | Pattern `/^[\d\s\+\-\/]+$/i`, min 6 chars |
+| Document | `mime_type` | Whitelist: PDF, JPG, PNG, DOCX, XLSX |
+| Document | `size_bytes` | Max 50MB |
+| Comment | `content` | Required, max 10,000 chars |
+
+---
+
+## D) Statusmodell & Ampellogik
+
+### D.1 Status State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PORTAL STATUS STATE MACHINE (je Phase)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌────────────────┐
+    │ TERMIN_OFFEN   │ ◄─── Initial State
+    └───────┬────────┘
+            │ [termin_geplant]
+            ▼
+    ┌────────────────┐
+    │ TERMIN_GEPLANT │
+    └───────┬────────┘
+            │ [einsatz_durchgefuehrt]
+            ▼
+    ┌────────────────┐
+    │ VOR_ORT_ERFOLGT│
+    └───────┬────────┘
+            │ [doku_gestartet]
+            ▼
+    ┌────────────────┐
+    │ DOKUMENTATION  │
+    └───────┬────────┘
+            │ [dokument_erstellt]
+            ▼
+    ┌─────────────────────┐      ┌──────────────────┐
+    │ FREIGABE_AUSSTEHEND │◄────►│ (Korrekturschleife)
+    └───────┬─────────────┘      └──────────────────┘
+            │ [freigabe_erteilt]
+            ▼
+    ┌────────────────────┐
+    │ IN_DURCHFUEHRUNG   │  (nur bei LB, RB, WH)
+    └───────┬────────────┘
+            │ [arbeiten_abgeschlossen]
+            ▼
+    ┌────────────────┐
+    │    ABNAHME     │
+    └───────┬────────┘
+            │ [abnahme_erfolgt]
+            ▼
+    ┌────────────────┐
+    │   ABRECHNUNG   │
+    └───────┬────────┘
+            │ [rechnung_bezahlt]
+            ▼
+    ┌────────────────┐
+    │  ABGESCHLOSSEN │ ◄─── Final State
+    └────────────────┘
+```
+
+### D.2 ERP Substatus Mapping
+
+```typescript
+// config/status-mapping.ts
+
+export const ERP_TO_PORTAL_STATUS: Record<string, PortalStatus> = {
+  // TERMIN_OFFEN
+  'ORTSTERMIN_OFFEN': PortalStatus.TERMIN_OFFEN,
+  
+  // TERMIN_GEPLANT
+  'ORTSTERMIN_BEAUFTRAGT': PortalStatus.TERMIN_GEPLANT,
+  
+  // VOR_ORT_ERFOLGT
+  'ORTSTERMIN_ERFOLGT': PortalStatus.VOR_ORT_ERFOLGT,
+  
+  // DOKUMENTATION
+  'PROTOKOLLERSTELLUNG': PortalStatus.DOKUMENTATION,
+  'ANGEBOTSERSTELLUNG': PortalStatus.DOKUMENTATION,
+  
+  // FREIGABE_AUSSTEHEND
+  'ANGEBOT_ERSTELLT': PortalStatus.FREIGABE_AUSSTEHEND,
+  'ANGEBOT_GEPRUEFT': PortalStatus.FREIGABE_AUSSTEHEND,
+  'ANGEBOT_KORREKTUR': PortalStatus.FREIGABE_AUSSTEHEND,
+  'ANGEBOT_VERSENDET': PortalStatus.FREIGABE_AUSSTEHEND,
+  
+  // IN_DURCHFUEHRUNG
+  'DURCHFUEHRUNG': PortalStatus.IN_DURCHFUEHRUNG,
+  
+  // ABNAHME
+  'ABNAHME_OFFEN': PortalStatus.ABNAHME,
+  'ABNAHME_ERFOLGT': PortalStatus.ABNAHME,
+  
+  // ABRECHNUNG
+  'RECHNUNGSERSTELLUNG': PortalStatus.ABRECHNUNG,
+  'RECHNUNG_ERSTELLT': PortalStatus.ABRECHNUNG,
+  'RECHNUNG_GEPRUEFT': PortalStatus.ABRECHNUNG,
+  'RECHNUNG_KORREKTUR': PortalStatus.ABRECHNUNG,
+  'RECHNUNG_VERSENDET': PortalStatus.ABRECHNUNG,
+  
+  // ABGESCHLOSSEN
+  'PHASE_ABGESCHLOSSEN': PortalStatus.ABGESCHLOSSEN,
+};
+```
+
+### D.3 SLA-Regeln & Ampellogik
+
+#### SLA-Definitionen pro Phase
+
+| Phase | Max. Durchlaufzeit | Yellow Threshold | Red Threshold |
+|-------|-------------------|------------------|---------------|
+| Leckortung (LO) | 3 Werktage | 2 Werktage | 3 Werktage |
+| Leckagebehebung (LB) | 5 Werktage | 3 Werktage | 5 Werktage |
+| Rückbau (RB) | 5 Werktage | 3 Werktage | 5 Werktage |
+| Trocknung (TR) | 21 Tage | 14 Tage | 21 Tage |
+| Wiederherstellung (WH) | 10 Werktage | 7 Werktage | 10 Werktage |
+
+#### Status-spezifische SLAs
+
+| Status | Max. Verweildauer | Yellow | Red |
+|--------|-------------------|--------|-----|
+| TERMIN_OFFEN | 24h | 12h | 24h |
+| TERMIN_GEPLANT | bis Termin | 0 | Termin überschritten |
+| FREIGABE_AUSSTEHEND | 48h | 24h | 48h |
+| ABRECHNUNG | 5 Werktage | 3 Werktage | 5 Werktage |
+
+#### Ampel-Berechnung (Pseudocode)
+
+```typescript
+// services/traffic-light.service.ts
+
+interface TrafficLightResult {
+  color: 'GREEN' | 'YELLOW' | 'RED';
+  reason: string;
+  daysOverdue?: number;
+  deadline?: Date;
+}
+
+function calculateTrafficLight(
+  claim: Claim,
+  phase: Phase,
+  now: Date = new Date()
+): TrafficLightResult {
+  
+  // 1. Check: Blocked Status (always RED)
+  if (claim.flags?.blocked) {
+    return { color: 'RED', reason: 'BLOCKED_FLAG' };
+  }
+  
+  // 2. Check: Phase SLA
+  const phaseAge = businessDaysDiff(phase.started_at, now);
+  const phaseSLA = PHASE_SLA[phase.phase_type];
+  
+  if (phaseAge > phaseSLA.red_threshold) {
+    return {
+      color: 'RED',
+      reason: 'PHASE_OVERDUE',
+      daysOverdue: phaseAge - phaseSLA.red_threshold
+    };
+  }
+  
+  if (phaseAge > phaseSLA.yellow_threshold) {
+    return {
+      color: 'YELLOW',
+      reason: 'PHASE_AT_RISK',
+      deadline: addBusinessDays(phase.started_at, phaseSLA.red_threshold)
+    };
+  }
+  
+  // 3. Check: Status SLA
+  const statusAge = hoursDiff(phase.status_changed_at, now);
+  const statusSLA = STATUS_SLA[phase.status];
+  
+  if (statusSLA && statusAge > statusSLA.red_hours) {
+    return {
+      color: 'RED',
+      reason: 'STATUS_OVERDUE',
+      daysOverdue: Math.ceil((statusAge - statusSLA.red_hours) / 24)
+    };
+  }
+  
+  if (statusSLA && statusAge > statusSLA.yellow_hours) {
+    return {
+      color: 'YELLOW',
+      reason: 'STATUS_AT_RISK'
+    };
+  }
+  
+  // 4. Check: Appointment overdue
+  const nextAppointment = getNextAppointment(claim.id, phase.id);
+  if (nextAppointment && nextAppointment.scheduled_start < now 
+      && nextAppointment.status !== 'COMPLETED') {
+    return {
+      color: 'RED',
+      reason: 'APPOINTMENT_OVERDUE'
+    };
+  }
+  
+  // 5. Check: Priority escalation
+  if (claim.priority === 'CRITICAL') {
+    // Kritische Schäden haben engere Thresholds
+    if (phaseAge > phaseSLA.yellow_threshold * 0.5) {
+      return { color: 'YELLOW', reason: 'CRITICAL_PRIORITY' };
+    }
+  }
+  
+  return { color: 'GREEN', reason: 'ON_TRACK' };
+}
+
+// Aggregate Traffic Light für Claim (alle aktiven Phasen)
+function calculateClaimTrafficLight(claim: Claim): TrafficLightResult {
+  const activePhases = claim.phases.filter(p => 
+    p.status !== PortalStatus.ABGESCHLOSSEN
+  );
+  
+  const phaseTrafficLights = activePhases.map(p => 
+    calculateTrafficLight(claim, p)
+  );
+  
+  // Worst-case wins
+  if (phaseTrafficLights.some(t => t.color === 'RED')) {
+    return phaseTrafficLights.find(t => t.color === 'RED')!;
+  }
+  if (phaseTrafficLights.some(t => t.color === 'YELLOW')) {
+    return phaseTrafficLights.find(t => t.color === 'YELLOW')!;
+  }
+  
+  return { color: 'GREEN', reason: 'ALL_ON_TRACK' };
+}
+```
+
+### D.4 Status-Übergangs-Trigger
+
+| Trigger Event | From Status | To Status | Source |
+|---------------|-------------|-----------|--------|
+| ERP Event: `TERMIN_GEPLANT` | TERMIN_OFFEN | TERMIN_GEPLANT | ERP Sync |
+| ERP Event: `EINSATZ_DURCHGEFUEHRT` | TERMIN_GEPLANT | VOR_ORT_ERFOLGT | ERP Sync |
+| Document Upload: Protocol | VOR_ORT_ERFOLGT | DOKUMENTATION | Portal |
+| Document Upload: Offer | DOKUMENTATION | FREIGABE_AUSSTEHEND | Portal |
+| Approval Action | FREIGABE_AUSSTEHEND | IN_DURCHFUEHRUNG | Portal/ERP |
+| ERP Event: `ARBEITEN_FERTIG` | IN_DURCHFUEHRUNG | ABNAHME | ERP Sync |
+| ERP Event: `ABNAHME_OK` | ABNAHME | ABRECHNUNG | ERP Sync |
+| ERP Event: `RECHNUNG_BEZAHLT` | ABRECHNUNG | ABGESCHLOSSEN | ERP Sync |
+
+---
+
+## E) Digitale Schadenakte
+
+### E.1 Ordnerstruktur (Template)
+
+```
+📁 Schaden {Projektnummer} - {Adresse}
+│
+├── 📁 00_Stammdaten
+│   ├── 📄 Schadenmeldung.pdf
+│   ├── 📄 Vollmacht.pdf
+│   └── 📄 Objektdaten.pdf
+│
+├── 📁 01_Leckortung
+│   ├── 📄 LO_Protokoll_{Datum}.pdf
+│   ├── 📄 LO_Angebot_{Nr}.pdf
+│   ├── 📄 LO_Rechnung_{Nr}.pdf
+│   └── 📁 Fotos
+│       └── 📷 *.jpg
+│
+├── 📁 02_Leckagebehebung
+│   ├── 📄 LB_Protokoll_{Datum}.pdf
+│   ├── 📄 LB_Angebot_{Nr}.pdf
+│   ├── 📄 LB_Rechnung_{Nr}.pdf
+│   └── 📁 Fotos
+│
+├── 📁 03_Rueckbau
+│   ├── 📄 RB_Protokoll_{Datum}.pdf
+│   ├── 📄 RB_Angebot_{Nr}.pdf
+│   ├── 📄 RB_Rechnung_{Nr}.pdf
+│   └── 📁 Fotos
+│
+├── 📁 04_Trocknung
+│   ├── 📄 Trocknungsprotokoll_{Datum}.pdf
+│   ├── 📄 Messwerte_{Datum}.csv
+│   ├── 📄 TR_Angebot_{Nr}.pdf
+│   ├── 📄 TR_Rechnung_{Nr}.pdf
+│   └── 📁 Fotos
+│
+├── 📁 05_Wiederherstellung
+│   ├── 📄 WH_Angebot_{Nr}.pdf
+│   ├── 📄 WH_Rechnung_{Nr}.pdf
+│   ├── 📄 Abnahmeprotokoll_{Datum}.pdf
+│   └── 📁 Fotos
+│
+├── 📁 06_Gutachten
+│   └── 📄 Gutachten_{SV}_{Datum}.pdf
+│
+└── 📁 07_Korrespondenz
+    └── 📄 *.pdf
+```
+
+### E.2 Folder-Entität (DB)
+
+```sql
+CREATE TABLE folders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id UUID REFERENCES claims(id) ON DELETE CASCADE,
+    parent_folder_id UUID REFERENCES folders(id),
+    name VARCHAR(255) NOT NULL,
+    folder_type VARCHAR(50), -- STAMMDATEN, PHASE, KORRESPONDENZ, etc.
+    phase_affinity VARCHAR(10), -- LO, LB, RB, TR, WH, NULL
+    sort_order INTEGER DEFAULT 0,
+    is_system_folder BOOLEAN DEFAULT false, -- true = auto-created
+    created_at TIMESTAMP DEFAULT now()
+);
+
+-- Auto-create folders on claim creation
+CREATE OR REPLACE FUNCTION create_claim_folders()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Stammdaten
+    INSERT INTO folders (claim_id, name, folder_type, sort_order, is_system_folder)
+    VALUES (NEW.id, '00_Stammdaten', 'STAMMDATEN', 0, true);
+    
+    -- Phase folders
+    INSERT INTO folders (claim_id, name, folder_type, phase_affinity, sort_order, is_system_folder)
+    VALUES 
+        (NEW.id, '01_Leckortung', 'PHASE', 'LO', 1, true),
+        (NEW.id, '02_Leckagebehebung', 'PHASE', 'LB', 2, true),
+        (NEW.id, '03_Rueckbau', 'PHASE', 'RB', 3, true),
+        (NEW.id, '04_Trocknung', 'PHASE', 'TR', 4, true),
+        (NEW.id, '05_Wiederherstellung', 'PHASE', 'WH', 5, true);
+    
+    -- Gutachten + Korrespondenz
+    INSERT INTO folders (claim_id, name, folder_type, sort_order, is_system_folder)
+    VALUES 
+        (NEW.id, '06_Gutachten', 'GUTACHTEN', 6, true),
+        (NEW.id, '07_Korrespondenz', 'KORRESPONDENZ', 7, true);
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_create_claim_folders
+    AFTER INSERT ON claims
+    FOR EACH ROW EXECUTE FUNCTION create_claim_folders();
+```
+
+### E.3 Document Metadata Schema
+
+```typescript
+// types/document-metadata.ts
+
+interface DocumentMetadata {
+  // Core
+  originalFilename: string;
+  contentHash: string; // SHA256 für Dedupe
+  
+  // Extraction (from OCR)
+  extractedProjectNumber?: string;
+  extractedClaimNumber?: string;
+  extractedAddress?: string;
+  extractedDate?: string;
+  extractedAmount?: number;
+  extractedRecipient?: string;
+  
+  // Classification
+  docTypeConfidence: number;
+  phaseAffinityConfidence: number;
+  
+  // Source
+  uploadSource: 'WEB_CONTEXTUAL' | 'WEB_GLOBAL' | 'EMAIL' | 'ERP_SYNC' | 'API';
+  uploadedByRole: string;
+  
+  // ERP Mapping
+  erpDocumentId?: string;
+  erpSyncedAt?: string;
+}
+```
+
+### E.4 Upload Policy
+
+| Rule | Value | Enforcement |
+|------|-------|-------------|
+| Max file size | 50 MB | Client + Server |
+| Allowed MIME types | `application/pdf`, `image/jpeg`, `image/png`, `application/vnd.openxmlformats-officedocument.*` | Server |
+| Filename sanitization | Remove special chars, max 200 chars | Server |
+| Virus scan | ClamAV via n8n workflow | Server (async) |
+| Duplicate detection | SHA256 hash check within claim | Server |
+
+### E.5 Versioning
+
+```sql
+-- Document versioning via parent reference
+-- v1: parent_version_id = NULL, version = 1
+-- v2: parent_version_id = v1.id, version = 2
+
+-- Get latest version
+CREATE VIEW documents_latest AS
+SELECT DISTINCT ON (COALESCE(parent_version_id, id)) *
+FROM documents
+ORDER BY COALESCE(parent_version_id, id), version DESC;
+
+-- Version history for a document
+CREATE OR REPLACE FUNCTION get_document_versions(doc_id UUID)
+RETURNS TABLE (
+    id UUID,
+    version INTEGER,
+    filename VARCHAR,
+    uploaded_at TIMESTAMP,
+    uploaded_by UUID
+) AS $$
+    WITH RECURSIVE version_chain AS (
+        SELECT id, version, filename, uploaded_at, uploaded_by, parent_version_id
+        FROM documents WHERE id = doc_id
+        UNION ALL
+        SELECT d.id, d.version, d.filename, d.uploaded_at, d.uploaded_by, d.parent_version_id
+        FROM documents d
+        INNER JOIN version_chain vc ON d.id = vc.parent_version_id
+    )
+    SELECT id, version, filename, uploaded_at, uploaded_by
+    FROM version_chain
+    ORDER BY version DESC;
+$$ LANGUAGE sql;
+```
+
+### E.6 Audit Trail (Document Actions)
+
+```sql
+CREATE TABLE document_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id UUID REFERENCES documents(id),
+    action VARCHAR(50) NOT NULL, -- UPLOAD, VIEW, DOWNLOAD, DELETE, ASSIGN, UNASSIGN
+    actor_id UUID REFERENCES users(id),
+    actor_ip INET,
+    actor_user_agent TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+-- Automatic logging via trigger
+CREATE OR REPLACE FUNCTION log_document_action()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO document_audit_log (document_id, action, actor_id, metadata)
+    VALUES (
+        COALESCE(NEW.id, OLD.id),
+        TG_ARGV[0],
+        auth.uid(),
+        jsonb_build_object(
+            'old', to_jsonb(OLD),
+            'new', to_jsonb(NEW)
+        )
+    );
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+---
+
+## F) Screens / UI Informationsarchitektur
+
+### F.1 Design Tokens
+
+```typescript
+// tailwind.config.ts
+
+import type { Config } from 'tailwindcss';
+
+const config: Config = {
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        // Brand Colors
+        'sws-green': {
+          DEFAULT: '#84bc47',
+          50: '#f4f9ed',
+          100: '#e6f2d5',
+          200: '#cfe6af',
+          300: '#afd47f',
+          400: '#84bc47', // Primary
+          500: '#6fa33a',
+          600: '#57822d',
+          700: '#446526',
+          800: '#3a5223',
+          900: '#324621',
+        },
+        'sws-gray': {
+          DEFAULT: '#6f6f6f',
+          50: '#f6f6f6',
+          100: '#e7e7e7',
+          200: '#d1d1d1',
+          300: '#b0b0b0',
+          400: '#888888',
+          500: '#6f6f6f', // Secondary
+          600: '#5d5d5d',
+          700: '#4f4f4f',
+          800: '#454545',
+          900: '#3d3d3d',
+        },
+        'sws-bg': '#f2f0ec',
+        'sws-foreground': '#000000',
+        'sws-card': '#ffffff',
+        
+        // Semantic Colors (Traffic Light)
+        'status-green': '#22c55e',
+        'status-yellow': '#eab308',
+        'status-red': '#ef4444',
+        
+        // Phase Colors
+        'phase-lo': '#ef4444',  // 🔴
+        'phase-lb': '#f97316',  // 🟠
+        'phase-rb': '#eab308',  // 🟡
+        'phase-tr': '#3b82f6',  // 🔵
+        'phase-wh': '#22c55e',  // 🟢
+      },
+      fontFamily: {
+        sans: ['Inter', 'Arial', 'Helvetica', 'sans-serif'],
+      },
+      boxShadow: {
+        'card': '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+        'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+      },
+      borderRadius: {
+        'card': '0.5rem', // rounded-lg
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+};
+
+export default config;
+```
+
+### F.2 Component Library (Shadcn Extension)
+
+```typescript
+// components/ui/claim-card.tsx
+
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+interface ClaimCardProps {
+  claim: Claim;
+  trafficLight: TrafficLightResult;
+  onClick?: () => void;
+  className?: string;
+}
+
+export function ClaimCard({ claim, trafficLight, onClick, className }: ClaimCardProps) {
+  const statusColorMap = {
+    GREEN: 'bg-status-green',
+    YELLOW: 'bg-status-yellow',
+    RED: 'bg-status-red animate-pulse',
+  };
+
+  return (
+    <Card
+      className={cn(
+        'bg-sws-card rounded-card shadow-card cursor-pointer',
+        'transition-all duration-200 ease-out',
+        'hover:-translate-y-1 hover:shadow-card-hover',
+        className
+      )}
+      onClick={onClick}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-sws-foreground">
+            {claim.erpProjectNumber || 'Neu'}
+          </span>
+          <div className={cn(
+            'w-3 h-3 rounded-full',
+            statusColorMap[trafficLight.color]
+          )} />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-sws-gray truncate">
+          {claim.property.address}
+        </p>
+        <div className="flex gap-1 mt-2">
+          <PhaseBadge phase={claim.currentPhase} />
+          <StatusBadge status={claim.currentStatus} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Phase Badge with dedicated colors
+function PhaseBadge({ phase }: { phase: ClaimPhase }) {
+  const colorMap: Record<ClaimPhase, string> = {
+    LO: 'bg-phase-lo text-white',
+    LB: 'bg-phase-lb text-white',
+    RB: 'bg-phase-rb text-black',
+    TR: 'bg-phase-tr text-white',
+    WH: 'bg-phase-wh text-white',
+  };
+  
+  const labelMap: Record<ClaimPhase, string> = {
+    LO: 'Leckortung',
+    LB: 'Leck.behebung',
+    RB: 'Rückbau',
+    TR: 'Trocknung',
+    WH: 'Wiederherst.',
+  };
+  
+  return (
+    <Badge className={cn('text-xs', colorMap[phase])}>
+      {labelMap[phase]}
+    </Badge>
+  );
+}
+```
+
+### F.3 Layout Structure
+
+```tsx
+// app/layout.tsx
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-sws-bg">
+      {/* Fixed Sidebar */}
+      <aside className="fixed left-0 top-0 h-full w-64 bg-sws-card border-r border-sws-gray-100">
+        <Sidebar />
+      </aside>
+      
+      {/* Main Content */}
+      <main className="ml-64 p-6 overflow-auto">
+        {children}
+      </main>
+    </div>
+  );
+}
+
+// components/sidebar.tsx
+function Sidebar() {
+  const navItems = [
+    { icon: MapPin, label: 'Kontrollzentrum', href: '/' },
+    { icon: FileText, label: 'Schadenfälle', href: '/claims' },
+    { icon: Calendar, label: 'Kalender', href: '/calendar' },
+    { icon: BarChart3, label: 'Statistik', href: '/statistics' },
+    { icon: Receipt, label: 'Angebote & Rechnungen', href: '/finance' },
+    { icon: Inbox, label: 'Dokument-Inbox', href: '/inbox' },
+    { icon: Settings, label: 'Einstellungen', href: '/settings' },
+  ];
+  
+  return (
+    <nav className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="p-4 border-b border-sws-gray-100">
+        <Logo />
+      </div>
+      
+      {/* Navigation */}
+      <ul className="flex-1 p-2 space-y-1">
+        {navItems.map(item => (
+          <SidebarItem key={item.href} {...item} />
+        ))}
+      </ul>
+      
+      {/* User Menu */}
+      <div className="p-4 border-t border-sws-gray-100">
+        <UserMenu />
+      </div>
+    </nav>
+  );
+}
+```
+
+### F.4 Screen Specifications
+
+#### F.4.1 Kontrollzentrum (Startseite / Map View)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │                    KONTROLLZENTRUM                                │
+│         │ ┌─────────────────────────────────────────────────────────────┐  │
+│ [Logo]  │ │ [🔍 Suche: Adresse, Name, Nr...]     [Filter ▼] [+ Schaden] │  │
+│         │ └─────────────────────────────────────────────────────────────┘  │
+│ ─────── │ ┌─────────────────────────────────────────────────────────────┐  │
+│ 📍 Kon- │ │                                                             │  │
+│   troll │ │                    LEAFLET MAP                              │  │
+│   zentr │ │                                                             │  │
+│         │ │        🔴 (pulsierend)                                      │  │
+│ 📄 Scha │ │                         🟢                                  │  │
+│   denfä │ │                                    🟡                       │  │
+│         │ │              🟢                                             │  │
+│ 📅 Kal. │ │                                         🟢                  │  │
+│         │ │                    [Cluster: 5]                             │  │
+│ 📊 Stat │ │                                                             │  │
+│         │ │                                                             │  │
+│ 💰 A&R  │ └─────────────────────────────────────────────────────────────┘  │
+│         │ ┌─────────────────────────────────────────────────────────────┐  │
+│ 📥 Inbox│ │              QUICK PREVIEW PANEL (bei Klick)                │  │
+│         │ │ ┌─────────────────────────────────────────────────────────┐ │  │
+│ ⚙️ Einst│ │ │ P123456 • Musterstr. 12, 12345 Berlin                  │ │  │
+│         │ │ │ Phase: 🔴 Leckortung • Status: Termin geplant          │ │  │
+│ ─────── │ │ │ [Kontakte ▼]  [Letzte Aktivität ▼]  [→ Details öffnen] │ │  │
+│ [User]  │ │ └─────────────────────────────────────────────────────────┘ │  │
+│         │ └─────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Leaflet Implementation:**
+
+```tsx
+// components/radar-map.tsx
+
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import L from 'leaflet';
+
+function RadarMap({ claims }: { claims: ClaimWithTrafficLight[] }) {
+  const createClusterCustomIcon = (cluster: L.MarkerCluster) => {
+    const childMarkers = cluster.getAllChildMarkers();
+    const hasRed = childMarkers.some(m => m.options.trafficLight === 'RED');
+    const hasYellow = childMarkers.some(m => m.options.trafficLight === 'YELLOW');
+    
+    const color = hasRed ? 'bg-status-red' : hasYellow ? 'bg-status-yellow' : 'bg-status-green';
+    
+    return L.divIcon({
+      html: `<div class="${color} w-8 h-8 rounded-full flex items-center justify-center text-white font-bold">
+               ${cluster.getChildCount()}
+             </div>`,
+      className: 'custom-cluster-icon',
+      iconSize: L.point(32, 32),
+    });
+  };
+
+  return (
+    <MapContainer
+      center={[51.1657, 10.4515]} // Germany center
+      zoom={6}
+      className="h-[calc(100vh-200px)] rounded-card"
+    >
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; OpenStreetMap'
+      />
+      
+      <MarkerClusterGroup
+        chunkedLoading
+        iconCreateFunction={createClusterCustomIcon}
+      >
+        {claims.map(claim => (
+          <ClaimMarker key={claim.id} claim={claim} />
+        ))}
+      </MarkerClusterGroup>
+    </MapContainer>
+  );
+}
+
+function ClaimMarker({ claim }: { claim: ClaimWithTrafficLight }) {
+  const icon = createTrafficLightIcon(claim.trafficLight.color);
+  
+  return (
+    <Marker
+      position={[claim.property.lat, claim.property.lng]}
+      icon={icon}
+      trafficLight={claim.trafficLight.color}
+    >
+      <Popup>
+        <ClaimQuickPreview claim={claim} />
+      </Popup>
+    </Marker>
+  );
+}
+
+function createTrafficLightIcon(color: TrafficLight): L.DivIcon {
+  const colorClass = {
+    GREEN: 'bg-status-green',
+    YELLOW: 'bg-status-yellow',
+    RED: 'bg-status-red animate-pulse',
+  }[color];
+  
+  return L.divIcon({
+    html: `<div class="${colorClass} w-4 h-4 rounded-full border-2 border-white shadow-lg"></div>`,
+    className: 'custom-marker-icon',
+    iconSize: L.point(16, 16),
+    iconAnchor: L.point(8, 8),
+  });
+}
+```
+
+#### F.4.2 Schadenfälle (List + Board View)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│         │                      SCHADENFÄLLE                                 │
+│         │ ┌─────────────────────────────────────────────────────────────┐  │
+│         │ │ [🔍 Suche...]  [Phase ▼] [Status ▼] [Ampel ▼] [📥 Export]  │  │
+│         │ │                              [≡ Liste] [▦ Board]           │  │
+│         │ └─────────────────────────────────────────────────────────────┘  │
+│         │                                                                   │
+│         │ ┌─── LIST VIEW ───────────────────────────────────────────────┐  │
+│         │ │ ┌─────┬──────────────────┬──────────┬────────┬─────┬──────┐ │  │
+│         │ │ │ 🚦 │ Projekt / Adresse │ Phase    │ Status │ SLA │ Last │ │  │
+│         │ │ ├─────┼──────────────────┼──────────┼────────┼─────┼──────┤ │  │
+│         │ │ │ 🔴 │ P123456           │ 🔴 LO   │ Termin │ -2d │ Ges. │ │  │
+│         │ │ │     │ Musterstr. 12    │          │ offen  │     │      │ │  │
+│         │ │ ├─────┼──────────────────┼──────────┼────────┼─────┼──────┤ │  │
+│         │ │ │ 🟡 │ P123457           │ 🔵 TR   │ Doku   │ +1d │ Mon. │ │  │
+│         │ │ │     │ Testweg 5        │          │        │     │      │ │  │
+│         │ │ └─────┴──────────────────┴──────────┴────────┴─────┴──────┘ │  │
+│         │ └─────────────────────────────────────────────────────────────┘  │
+│         │                                                                   │
+│         │ ┌─── BOARD VIEW ──────────────────────────────────────────────┐  │
+│         │ │  TERMIN    TERMIN     VOR ORT    DOKU     FREIGABE   ...   │  │
+│         │ │  OFFEN     GEPLANT    ERFOLGT                               │  │
+│         │ │ ┌──────┐  ┌──────┐   ┌──────┐  ┌──────┐  ┌──────┐          │  │
+│         │ │ │Card  │  │Card  │   │Card  │  │Card  │  │Card  │          │  │
+│         │ │ │🔴    │  │🟡    │   │🟢    │  │🟢    │  │🟡    │          │  │
+│         │ │ └──────┘  └──────┘   └──────┘  └──────┘  └──────┘          │  │
+│         │ │           ┌──────┐                                          │  │
+│         │ │           │Card  │                                          │  │
+│         │ │           └──────┘                                          │  │
+│         │ └─────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### F.4.3 Schaden-Detailseite
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│           │                    SCHADEN P123456                     [← Zurück]          │
+│           │ ┌───────────────────────────────────────────────────────────────────────┐  │
+│           │ │ 🏠 Musterstraße 12, 12345 Berlin               🔴 LECKORTUNG          │  │
+│           │ │ VN: Max Mustermann | Tel: 0171/1234567         Status: Termin offen    │  │
+│           │ │ [📍 Maps]  [📞 Anrufen]  [✉️ Mail]             SLA: ⚠️ -2 Tage        │  │
+│           │ └───────────────────────────────────────────────────────────────────────┘  │
+│           │                                                                            │
+│           │ ┌─────────────────────────────────────────────────────────────────────────┐│
+│           │ │ [Übersicht] [Timeline] [Dokumente] [Angebote/Rechnungen] [Termine]     ││
+│           │ └─────────────────────────────────────────────────────────────────────────┘│
+│           │                                                                            │
+│           │ ═══════════════════════════ ÜBERSICHT TAB ════════════════════════════    │
+│           │                                                                            │
+│           │ ┌─── PHASE PROGRESS ────────────────────────────────────────────────────┐ │
+│           │ │  🔴 LO     🟠 LB      🟡 RB      🔵 TR      🟢 WH                     │ │
+│           │ │  ████      ░░░░      ░░░░      ░░░░      ░░░░                         │ │
+│           │ │  aktiv                                                                │ │
+│           │ └───────────────────────────────────────────────────────────────────────┘ │
+│           │                                                                            │
+│           │ ┌─── STAMMDATEN ──────────────────┐ ┌─── BETEILIGTE ─────────────────────┐│
+│           │ │ Objektadresse: Musterstr. 12    │ │ 👤 VN: Max Mustermann              ││
+│           │ │ PLZ/Ort: 12345 Berlin           │ │    📞 0171/1234567                ││
+│           │ │ Bauart: Massiv                  │ │ 👤 Hausverwaltung: ABC GmbH       ││
+│           │ │ Baujahr: 1985                   │ │    📞 030/9876543                 ││
+│           │ │ Einheiten: 12                   │ │ 👤 Versicherer: XY Versicherung   ││
+│           │ │ Bodenaufbau: Estrich auf Dämmung│ │    Schaden-Nr: VS-2024-12345      ││
+│           │ │                                 │ │ 👤 Sachverständiger: Dr. Schmidt  ││
+│           │ │ Flags: ☑️ Leckortung erforderlich│ │                                   ││
+│           │ └─────────────────────────────────┘ └───────────────────────────────────┘│
+│           │                                                                            │
+│           │ ┌─── SCHADENBESCHREIBUNG ────────────────────────────────────────────────┐│
+│           │ │ Wasserschaden im Badezimmer, vermutlich undichte Duschrinne.          ││
+│           │ │ Feuchte Stellen an Wand sichtbar. Mieter meldet muffigen Geruch.      ││
+│           │ └───────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### F.4.4 Timeline Tab (Schaden-Detail)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│           │ ═══════════════════════════ TIMELINE TAB ═════════════════════════════    │
+│           │                                                                            │
+│           │ ┌─── NEUER KOMMENTAR ────────────────────────────────────────────────────┐│
+│           │ │ [                                                          ] [Senden]  ││
+│           │ │ [📎 Datei]  [@Erwähnen]                                               ││
+│           │ └───────────────────────────────────────────────────────────────────────┘│
+│           │                                                                            │
+│           │ ┌─── TIMELINE ───────────────────────────────────────────────────────────┐│
+│           │ │                                                                        ││
+│           │ │ ● 15.01.2025 14:32                                                     ││
+│           │ │ │ 📄 Dokument hochgeladen: LO_Protokoll.pdf                           ││
+│           │ │ │    von: System (OCR)                                                 ││
+│           │ │ │    → Automatisch zugeordnet (Confidence: 94%)                        ││
+│           │ │                                                                        ││
+│           │ │ ● 15.01.2025 10:15                                                     ││
+│           │ │ │ 💬 Kommentar von Maria Müller (HV Muster GmbH)                      ││
+│           │ │ │    "Mieter ist von 10-14 Uhr erreichbar."                           ││
+│           │ │ │    [Antworten]                                                       ││
+│           │ │                                                                        ││
+│           │ │ ● 14.01.2025 16:00                                                     ││
+│           │ │ │ 🔄 Status geändert: TERMIN_OFFEN → TERMIN_GEPLANT                   ││
+│           │ │ │    Quelle: ERP Sync                                                  ││
+│           │ │                                                                        ││
+│           │ │ ● 14.01.2025 09:30                                                     ││
+│           │ │ │ 📅 Termin geplant: Leckortung                                       ││
+│           │ │ │    17.01.2025, 10:00-12:00                                           ││
+│           │ │                                                                        ││
+│           │ │ ● 13.01.2025 08:45                                                     ││
+│           │ │ │ ✨ Schaden angelegt                                                  ││
+│           │ │ │    von: Maria Müller                                                 ││
+│           │ │                                                                        ││
+│           │ └───────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### F.4.5 Dokumente Tab (Schaden-Detail)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│           │ ═══════════════════════════ DOKUMENTE TAB ════════════════════════════    │
+│           │                                                                            │
+│           │ ┌─── UPLOAD ZONE ────────────────────────────────────────────────────────┐│
+│           │ │    ┌─────────────────────────────────────────────────────────────┐    ││
+│           │ │    │                                                             │    ││
+│           │ │    │   📁 Dateien hier ablegen oder [Durchsuchen]               │    ││
+│           │ │    │      PDF, JPG, PNG, DOCX, XLSX (max. 50MB)                 │    ││
+│           │ │    │                                                             │    ││
+│           │ │    └─────────────────────────────────────────────────────────────┘    ││
+│           │ └───────────────────────────────────────────────────────────────────────┘│
+│           │                                                                            │
+│           │ ┌─── ORDNERSTRUKTUR ─────────────────────────────────────────────────────┐│
+│           │ │ 📁 00_Stammdaten                                           [2 Dok.]    ││
+│           │ │ ├─ 📄 Schadenmeldung.pdf                              15.01. 14:00    ││
+│           │ │ └─ 📄 Vollmacht.pdf                                   15.01. 14:05    ││
+│           │ │                                                                        ││
+│           │ │ 📁 01_Leckortung                                           [1 Dok.]    ││
+│           │ │ └─ 📄 LO_Protokoll_20250117.pdf                   🆕 eben hochgeladen ││
+│           │ │                                                                        ││
+│           │ │ 📁 02_Leckagebehebung                                      [0 Dok.]    ││
+│           │ │ 📁 03_Rueckbau                                             [0 Dok.]    ││
+│           │ │ 📁 04_Trocknung                                            [0 Dok.]    ││
+│           │ │ 📁 05_Wiederherstellung                                    [0 Dok.]    ││
+│           │ │ 📁 06_Gutachten                                            [0 Dok.]    ││
+│           │ │ 📁 07_Korrespondenz                                        [0 Dok.]    ││
+│           │ └───────────────────────────────────────────────────────────────────────┘│
+│           │                                                                            │
+│           │ [Klick auf Dokument → Preview Modal mit Download/Versionen/Metadaten]     │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### F.5 Responsive Breakpoints (PWA)
+
+```typescript
+// PWA optimized for mobile consumption
+
+const breakpoints = {
+  mobile: '0px',      // 0-639px
+  tablet: '640px',    // 640-1023px
+  desktop: '1024px',  // 1024px+
+};
+
+// Mobile: Simplified single-column layout
+// - Map fullscreen with floating action button
+// - Bottom nav instead of sidebar
+// - Card-based list views
+// - Detail page: stacked sections
+
+// Desktop: Full sidebar + content area
+```
+
+---
+
+## G) Integrations- & Sync-Konzept (ERP first)
+
+### G.1 Architektur-Prinzipien
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ERP-FIRST ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌───────────────────┐                     ┌───────────────────┐          │
+│   │                   │                     │                   │          │
+│   │    ERP SYSTEM     │ ◄───────────────── │   SCHADENRADAR    │          │
+│   │  (Source of Truth)│     Read Events     │    (View Layer)   │          │
+│   │                   │                     │                   │          │
+│   └─────────┬─────────┘                     └─────────┬─────────┘          │
+│             │                                         │                     │
+│             │ Webhooks / Events                       │ Portal Actions      │
+│             ▼                                         ▼                     │
+│   ┌─────────────────────────────────────────────────────────────────┐      │
+│   │                        n8n WORKFLOW ENGINE                       │      │
+│   │                                                                  │      │
+│   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │      │
+│   │  │ ERP→Portal  │  │ Portal→ERP  │  │ Conflict    │             │      │
+│   │  │ Sync        │  │ Sync        │  │ Resolution  │             │      │
+│   │  └─────────────┘  └─────────────┘  └─────────────┘             │      │
+│   │                                                                  │      │
+│   └─────────────────────────────────────────────────────────────────┘      │
+│                                                                             │
+│   REGELN:                                                                   │
+│   1. ERP ist IMMER Source of Truth für Stammdaten                          │
+│   2. Portal speichert nur Portal-native Daten + Cache                       │
+│   3. Alle Status-Änderungen: ERP führt, Portal folgt                       │
+│   4. Portal→ERP: nur Kommentare, Dokumente, Meldungen                      │
+│   5. Jedes Sync-Event hat eine idempotency_key                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### G.2 Data Ownership Matrix
+
+| Data Domain | ERP Owns | Portal Owns | Sync Direction |
+|-------------|:--------:|:-----------:|----------------|
+| Claim Core (Project#, phases) | ✅ | ❌ | ERP → Portal |
+| Status (all phases) | ✅ | ❌ | ERP → Portal |
+| Property/Address | ✅ | ❌ | ERP → Portal |
+| Contacts (VN, Beteiligte) | ✅ | ❌ | ERP → Portal |
+| Calendar/Appointments | ✅ | ❌ | ERP → Portal |
+| Offers/Invoices | ✅ | ❌ | ERP → Portal |
+| Documents (metadata) | ✅ | ✅ | Bidirectional |
+| Documents (files) | ✅ | ✅ | Bidirectional |
+| Comments/Threads | ❌ | ✅ | Portal → ERP |
+| User/Permissions | ❌ | ✅ | Portal native |
+| Timeline Events | ✅ | ✅ | Merged view |
+
+### G.3 Sync Flows
+
+#### G.3.1 ERP → Portal (Status Sync)
+
+```yaml
+# n8n Workflow: erp_status_sync
+
+trigger:
+  type: webhook
+  path: /erp/status-changed
+  method: POST
+
+nodes:
+  - name: Validate Payload
+    type: function
+    code: |
+      const { erp_project_number, erp_substatus, timestamp, event_id } = $input.body;
+      
+      if (!erp_project_number || !erp_substatus) {
+        throw new Error('Invalid payload');
+      }
+      
+      return {
+        json: {
+          erpProjectNumber: erp_project_number,
+          erpSubstatus: erp_substatus,
+          timestamp: timestamp,
+          eventId: event_id,
+          idempotencyKey: `status_${erp_project_number}_${event_id}`
+        }
+      };
+
+  - name: Check Idempotency
+    type: supabase
+    operation: select
+    table: erp_sync_log
+    filters:
+      - field: payload_hash
+        operator: eq
+        value: "={{ $json.idempotencyKey }}"
+    onNoResults: continue
+    onResults: stop  # Already processed
+
+  - name: Map to Portal Status
+    type: function
+    code: |
+      const mapping = {
+        'ORTSTERMIN_OFFEN': 'TERMIN_OFFEN',
+        'ORTSTERMIN_BEAUFTRAGT': 'TERMIN_GEPLANT',
+        // ... full mapping
+      };
+      
+      return {
+        json: {
+          ...$json,
+          portalStatus: mapping[$json.erpSubstatus] || 'UNKNOWN'
+        }
+      };
+
+  - name: Update Claim Phase
+    type: supabase
+    operation: update
+    table: phases
+    filters:
+      - field: claim.erp_project_number
+        operator: eq
+        value: "={{ $json.erpProjectNumber }}"
+    data:
+      status: "={{ $json.portalStatus }}"
+      erp_substatus: "={{ $json.erpSubstatus }}"
+      status_changed_at: "={{ $json.timestamp }}"
+
+  - name: Create Timeline Event
+    type: supabase
+    operation: insert
+    table: timeline_events
+    data:
+      claim_id: "={{ $node['Update Claim Phase'].data.claim_id }}"
+      event_type: STATUS_CHANGE
+      title: "Status geändert: {{ $json.portalStatus }}"
+      metadata:
+        from_erp: true
+        erp_substatus: "={{ $json.erpSubstatus }}"
+      erp_event_id: "={{ $json.eventId }}"
+
+  - name: Log Sync
+    type: supabase
+    operation: insert
+    table: erp_sync_log
+    data:
+      entity_type: status
+      erp_entity_id: "={{ $json.eventId }}"
+      direction: ERP_TO_PORTAL
+      operation: UPDATE
+      payload_hash: "={{ $json.idempotencyKey }}"
+      status: SUCCESS
+```
+
+#### G.3.2 Portal → ERP (Document Upload)
+
+```yaml
+# n8n Workflow: portal_document_to_erp
+
+trigger:
+  type: supabase_realtime
+  table: documents
+  event: INSERT
+
+nodes:
+  - name: Filter ERP-relevant docs
+    type: function
+    code: |
+      // Only sync certain doc types to ERP
+      const erpRelevantTypes = [
+        'ANGEBOT', 'RECHNUNG', 'GUTACHTEN', 
+        'LO_PROTOKOLL', 'ABNAHMEPROTOKOLL'
+      ];
+      
+      if (!erpRelevantTypes.includes($input.doc_type)) {
+        return { skip: true };
+      }
+      
+      return { json: $input };
+
+  - name: Get Claim ERP ID
+    type: supabase
+    operation: select
+    table: claims
+    filters:
+      - field: id
+        operator: eq
+        value: "={{ $json.claim_id }}"
+    fields:
+      - erp_project_number
+
+  - name: Upload to ERP
+    type: http
+    method: POST
+    url: "{{ $env.ERP_API_URL }}/documents"
+    headers:
+      Authorization: "Bearer {{ $env.ERP_API_TOKEN }}"
+    body:
+      project_number: "={{ $json.erp_project_number }}"
+      document_type: "={{ $json.doc_type }}"
+      filename: "={{ $json.filename }}"
+      storage_url: "={{ $json.storage_path }}"
+      metadata: "={{ $json.metadata }}"
+
+  - name: Update Document with ERP ID
+    type: supabase
+    operation: update
+    table: documents
+    filters:
+      - field: id
+        operator: eq
+        value: "={{ $json.id }}"
+    data:
+      erp_document_id: "={{ $node['Upload to ERP'].json.erp_doc_id }}"
+
+  - name: Log Sync
+    type: supabase
+    operation: insert
+    table: erp_sync_log
+    data:
+      entity_type: document
+      entity_id: "={{ $json.id }}"
+      erp_entity_id: "={{ $node['Upload to ERP'].json.erp_doc_id }}"
+      direction: PORTAL_TO_ERP
+      operation: CREATE
+      status: SUCCESS
+```
+
+### G.4 Conflict Resolution
+
+```typescript
+// services/conflict-resolver.ts
+
+enum ConflictStrategy {
+  ERP_WINS = 'ERP_WINS',           // Default for status/master data
+  PORTAL_WINS = 'PORTAL_WINS',     // For portal-native data
+  MERGE = 'MERGE',                 // For comments/timeline
+  MANUAL = 'MANUAL',               // Flag for human review
+}
+
+interface ConflictResolution {
+  entityType: string;
+  strategy: ConflictStrategy;
+  mergeLogic?: (erpData: any, portalData: any) => any;
+}
+
+const conflictStrategies: Record<string, ConflictResolution> = {
+  'claim.status': {
+    entityType: 'claim.status',
+    strategy: ConflictStrategy.ERP_WINS,
+  },
+  'claim.contacts': {
+    entityType: 'claim.contacts',
+    strategy: ConflictStrategy.ERP_WINS,
+  },
+  'document.metadata': {
+    entityType: 'document.metadata',
+    strategy: ConflictStrategy.MERGE,
+    mergeLogic: (erp, portal) => ({
+      ...erp,
+      portal_tags: portal.portal_tags,
+      portal_notes: portal.portal_notes,
+    }),
+  },
+  'timeline_event': {
+    entityType: 'timeline_event',
+    strategy: ConflictStrategy.MERGE,
+    mergeLogic: (erp, portal) => {
+      // Dedupe by erp_event_id
+      const merged = [...erp];
+      portal.forEach(e => {
+        if (!e.erp_event_id || !merged.some(m => m.erp_event_id === e.erp_event_id)) {
+          merged.push(e);
+        }
+      });
+      return merged.sort((a, b) => b.created_at - a.created_at);
+    },
+  },
+};
+```
+
+### G.5 Censored Log (Timeline Filtering)
+
+```typescript
+// services/timeline-censor.ts
+
+interface CensorRule {
+  eventType: string;
+  visibleToExternal: boolean;
+  redactFields?: string[];
+  transformTitle?: (original: string) => string;
+}
+
+const censorRules: CensorRule[] = [
+  {
+    eventType: 'STATUS_CHANGE',
+    visibleToExternal: true,
+    // Show only portal status, not ERP substatus
+    redactFields: ['erp_substatus', 'internal_notes'],
+  },
+  {
+    eventType: 'INTERNAL_NOTE',
+    visibleToExternal: false,
+  },
+  {
+    eventType: 'COST_UPDATE',
+    visibleToExternal: false,
+  },
+  {
+    eventType: 'DOCUMENT_UPLOAD',
+    visibleToExternal: true,
+    redactFields: ['internal_classification'],
+  },
+  {
+    eventType: 'APPOINTMENT',
+    visibleToExternal: true,
+    redactFields: ['technician_notes', 'resource_allocation'],
+  },
+];
+
+function censorTimeline(
+  events: TimelineEvent[],
+  userRole: UserRole
+): TimelineEvent[] {
+  if (isInternalUser(userRole)) {
+    return events;
+  }
+  
+  return events
+    .filter(e => {
+      const rule = censorRules.find(r => r.eventType === e.event_type);
+      return rule?.visibleToExternal !== false;
+    })
+    .map(e => {
+      const rule = censorRules.find(r => r.eventType === e.event_type);
+      if (!rule?.redactFields) return e;
+      
+      const censored = { ...e };
+      rule.redactFields.forEach(field => {
+        if (censored.metadata?.[field]) {
+          delete censored.metadata[field];
+        }
+      });
+      
+      if (rule.transformTitle) {
+        censored.title = rule.transformTitle(censored.title);
+      }
+      
+      return censored;
+    });
+}
+```
+
+---
+
+## H) OCR & Dokument-Automation
+
+### H.1 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                            OCR DOCUMENT PIPELINE                                         │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+     UPLOAD SOURCES                   PROCESSING                    ASSIGNMENT
+    ┌─────────────────┐         ┌─────────────────────┐       ┌─────────────────────┐
+    │ 📤 Contextual   │         │                     │       │                     │
+    │    (on Claim)   │────────►│                     │       │  ✅ Auto-Assigned   │
+    └─────────────────┘         │                     │       │     (≥0.85)         │
+                                │   Azure Document    │       └─────────────────────┘
+    ┌─────────────────┐         │   Intelligence      │               │
+    │ 📥 Global       │────────►│                     │       ┌───────▼───────────┐
+    │    (Inbox)      │         │   ┌─────────────┐   │       │                   │
+    └─────────────────┘         │   │ Text Extract│   │       │  🔍 Review Queue  │
+                                │   │ Key-Value   │   │──────►│     (0.6-0.85)    │
+    ┌─────────────────┐         │   │ Layout      │   │       │                   │
+    │ 📧 E-Mail       │────────►│   │ DocType     │   │       └───────────────────┘
+    │    (n8n)        │         │   └─────────────┘   │               │
+    └─────────────────┘         │                     │       ┌───────▼───────────┐
+                                │                     │       │                   │
+    ┌─────────────────┐         │                     │       │  📭 Unassigned    │
+    │ 🔄 ERP Sync     │────────►│                     │       │     (<0.6)        │
+    └─────────────────┘         └─────────────────────┘       │                   │
+                                                              └───────────────────┘
+```
+
+### H.2 Azure Document Intelligence Integration
+
+```typescript
+// services/ocr/azure-doc-intelligence.ts
+
+import { DocumentAnalysisClient, AzureKeyCredential } from '@azure/ai-form-recognizer';
+
+const client = new DocumentAnalysisClient(
+  process.env.AZURE_DI_ENDPOINT!,
+  new AzureKeyCredential(process.env.AZURE_DI_KEY!)
+);
+
+interface ExtractionResult {
+  rawText: string;
+  extractedFields: ExtractedFields;
+  confidenceScores: Record<string, number>;
+  documentType: DocumentType;
+  documentTypeConfidence: number;
+  processingTimeMs: number;
+  azureOperationId: string;
+}
+
+interface ExtractedFields {
+  projectNumber?: string;
+  claimNumbers?: {
+    insurer?: string;
+    regulator?: string;
+    expert?: string;
+  };
+  address?: {
+    street?: string;
+    zipCode?: string;
+    city?: string;
+  };
+  date?: string;
+  amount?: number;
+  recipient?: string;
+  sender?: string;
+  persons?: string[];
+}
+
+export async function analyzeDocument(
+  documentUrl: string,
+  mimeType: string
+): Promise<ExtractionResult> {
+  const startTime = Date.now();
+  
+  // Use prebuilt-document for general extraction
+  // Or custom model for domain-specific docs
+  const modelId = selectModel(mimeType);
+  
+  const poller = await client.beginAnalyzeDocument(modelId, documentUrl);
+  const result = await poller.pollUntilDone();
+  
+  return {
+    rawText: extractFullText(result),
+    extractedFields: extractFields(result),
+    confidenceScores: buildConfidenceMap(result),
+    documentType: classifyDocumentType(result),
+    documentTypeConfidence: result.documents?.[0]?.confidence || 0,
+    processingTimeMs: Date.now() - startTime,
+    azureOperationId: result.modelId,
+  };
+}
+
+function selectModel(mimeType: string): string {
+  // Custom models for specific document types
+  const customModels: Record<string, string> = {
+    'application/pdf': 'prebuilt-document',
+    'image/jpeg': 'prebuilt-read',
+    // Add custom trained models here
+    // 'LO_PROTOKOLL': 'custom-lo-protokoll-v1',
+  };
+  
+  return customModels[mimeType] || 'prebuilt-document';
+}
+
+function extractFields(result: AnalyzeResult): ExtractedFields {
+  const fields: ExtractedFields = {};
+  
+  // Project Number Pattern: P followed by 6 digits
+  const projectMatch = result.content.match(/P\d{6}/);
+  if (projectMatch) {
+    fields.projectNumber = projectMatch[0];
+  }
+  
+  // Claim Number Patterns (various formats)
+  const claimPatterns = [
+    /Schaden(?:nummer|nr\.?)[\s:]*([A-Z0-9\-\/]+)/i,
+    /VS[\-\/]?\d{4}[\-\/]?\d+/,
+    /SV[\-\/]?\d+[\-\/]?\d*/,
+  ];
+  
+  for (const pattern of claimPatterns) {
+    const match = result.content.match(pattern);
+    if (match) {
+      // Classify which type based on prefix
+      if (match[0].startsWith('VS')) {
+        fields.claimNumbers = { ...fields.claimNumbers, insurer: match[0] };
+      } else if (match[0].startsWith('SV')) {
+        fields.claimNumbers = { ...fields.claimNumbers, expert: match[0] };
+      }
+    }
+  }
+  
+  // Address extraction via key-value pairs
+  const addressKv = result.keyValuePairs?.find(
+    kv => kv.key?.content?.toLowerCase().includes('adresse')
+  );
+  if (addressKv?.value?.content) {
+    fields.address = parseAddress(addressKv.value.content);
+  }
+  
+  // Amount extraction
+  const amountPatterns = [
+    /(?:Gesamt|Summe|Betrag)[\s:]*€?\s*([\d.,]+)/i,
+    /€\s*([\d.,]+)/,
+  ];
+  for (const pattern of amountPatterns) {
+    const match = result.content.match(pattern);
+    if (match) {
+      fields.amount = parseGermanNumber(match[1]);
+      break;
+    }
+  }
+  
+  // Date extraction
+  const dateMatch = result.content.match(/\d{1,2}\.\d{1,2}\.\d{2,4}/);
+  if (dateMatch) {
+    fields.date = dateMatch[0];
+  }
+  
+  // Person names (from entities)
+  fields.persons = result.entities
+    ?.filter(e => e.category === 'Person')
+    .map(e => e.content) || [];
+  
+  return fields;
+}
+
+function classifyDocumentType(result: AnalyzeResult): DocumentType {
+  const content = result.content.toLowerCase();
+  
+  const typePatterns: Array<[DocumentType, RegExp[]]> = [
+    [DocumentType.LO_PROTOKOLL, [/leckortung/, /leckageortung/, /lo[\-\s]protokoll/]],
+    [DocumentType.LB_PROTOKOLL, [/leckagebehebung/, /lb[\-\s]protokoll/]],
+    [DocumentType.ANGEBOT, [/angebot/, /kostenvoranschlag/, /kva/]],
+    [DocumentType.RECHNUNG, [/rechnung/, /invoice/]],
+    [DocumentType.GUTACHTEN, [/gutachten/, /sachverständig/]],
+    [DocumentType.TROCKNUNGSPROTOKOLL, [/trocknungsprotokoll/, /messwerte/]],
+    [DocumentType.ABNAHMEPROTOKOLL, [/abnahme/, /übergabe/]],
+    [DocumentType.VOLLMACHT, [/vollmacht/, /bevollmächtigung/]],
+    [DocumentType.SCHADENMELDUNG, [/schadenmeldung/, /schadenanzei/]],
+  ];
+  
+  for (const [type, patterns] of typePatterns) {
+    if (patterns.some(p => p.test(content))) {
+      return type;
+    }
+  }
+  
+  return DocumentType.SONSTIGES;
+}
+```
+
+### H.3 Matching Engine
+
+```typescript
+// services/ocr/matching-engine.ts
+
+interface MatchCandidate {
+  claimId: string;
+  score: number;
+  matchReasons: MatchReason[];
+}
+
+interface MatchReason {
+  criterion: MatchCriterion;
+  extractedValue: string;
+  matchedValue: string;
+  score: number;
+}
+
+enum MatchCriterion {
+  PROJECT_NUMBER = 'PROJECT_NUMBER',
+  INSURER_CLAIM_NUMBER = 'INSURER_CLAIM_NUMBER',
+  REGULATOR_CLAIM_NUMBER = 'REGULATOR_CLAIM_NUMBER',
+  EXPERT_CLAIM_NUMBER = 'EXPERT_CLAIM_NUMBER',
+  ADDRESS_EXACT = 'ADDRESS_EXACT',
+  ADDRESS_FUZZY = 'ADDRESS_FUZZY',
+  PERSON_NAME = 'PERSON_NAME',
+  TENANT_CONTEXT = 'TENANT_CONTEXT',
+}
+
+// Criterion Weights
+const CRITERION_WEIGHTS: Record<MatchCriterion, number> = {
+  [MatchCriterion.PROJECT_NUMBER]: 1.0,        // Highest priority
+  [MatchCriterion.INSURER_CLAIM_NUMBER]: 0.9,
+  [MatchCriterion.REGULATOR_CLAIM_NUMBER]: 0.9,
+  [MatchCriterion.EXPERT_CLAIM_NUMBER]: 0.85,
+  [MatchCriterion.ADDRESS_EXACT]: 0.8,
+  [MatchCriterion.ADDRESS_FUZZY]: 0.5,
+  [MatchCriterion.PERSON_NAME]: 0.4,
+  [MatchCriterion.TENANT_CONTEXT]: 0.2,        // Boost factor
+};
+
+// Confidence Thresholds
+const THRESHOLDS = {
+  AUTO_ASSIGN: 0.85,
+  REVIEW_QUEUE: 0.6,
+  UNASSIGNED: 0.0,
+};
+
+export async function findMatchingClaim(
+  extraction: ExtractionResult,
+  tenantId: string
+): Promise<{
+  bestMatch: MatchCandidate | null;
+  alternatives: MatchCandidate[];
+  assignmentType: 'AUTO' | 'REVIEW' | 'UNASSIGNED';
+}> {
+  // Get candidate claims for this tenant
+  const candidateClaims = await getCandidateClaims(tenantId);
+  const candidates: MatchCandidate[] = [];
+  
+  for (const claim of candidateClaims) {
+    const matchResult = calculateMatchScore(extraction, claim);
+    if (matchResult.score > 0) {
+      candidates.push({
+        claimId: claim.id,
+        score: matchResult.score,
+        matchReasons: matchResult.reasons,
+      });
+    }
+  }
+  
+  // Sort by score descending
+  candidates.sort((a, b) => b.score - a.score);
+  
+  const bestMatch = candidates[0] || null;
+  const alternatives = candidates.slice(1, 5); // Top 5 alternatives
+  
+  let assignmentType: 'AUTO' | 'REVIEW' | 'UNASSIGNED';
+  if (bestMatch && bestMatch.score >= THRESHOLDS.AUTO_ASSIGN) {
+    assignmentType = 'AUTO';
+  } else if (bestMatch && bestMatch.score >= THRESHOLDS.REVIEW_QUEUE) {
+    assignmentType = 'REVIEW';
+  } else {
+    assignmentType = 'UNASSIGNED';
+  }
+  
+  return { bestMatch, alternatives, assignmentType };
+}
+
+function calculateMatchScore(
+  extraction: ExtractionResult,
+  claim: Claim
+): { score: number; reasons: MatchReason[] } {
+  const reasons: MatchReason[] = [];
+  
+  // 1. Project Number Match (exact)
+  if (extraction.extractedFields.projectNumber) {
+    if (extraction.extractedFields.projectNumber === claim.erpProjectNumber) {
+      reasons.push({
+        criterion: MatchCriterion.PROJECT_NUMBER,
+        extractedValue: extraction.extractedFields.projectNumber,
+        matchedValue: claim.erpProjectNumber,
+        score: CRITERION_WEIGHTS[MatchCriterion.PROJECT_NUMBER],
+      });
+    }
+  }
+  
+  // 2. Claim Numbers Match
+  const claimNumbers = extraction.extractedFields.claimNumbers;
+  if (claimNumbers?.insurer && 
+      claim.externalClaimNumbers?.insurer === claimNumbers.insurer) {
+    reasons.push({
+      criterion: MatchCriterion.INSURER_CLAIM_NUMBER,
+      extractedValue: claimNumbers.insurer,
+      matchedValue: claim.externalClaimNumbers.insurer,
+      score: CRITERION_WEIGHTS[MatchCriterion.INSURER_CLAIM_NUMBER],
+    });
+  }
+  
+  // 3. Address Match
+  if (extraction.extractedFields.address) {
+    const addressScore = compareAddresses(
+      extraction.extractedFields.address,
+      claim.property
+    );
+    
+    if (addressScore >= 0.95) {
+      reasons.push({
+        criterion: MatchCriterion.ADDRESS_EXACT,
+        extractedValue: formatAddress(extraction.extractedFields.address),
+        matchedValue: formatAddress(claim.property),
+        score: CRITERION_WEIGHTS[MatchCriterion.ADDRESS_EXACT],
+      });
+    } else if (addressScore >= 0.7) {
+      reasons.push({
+        criterion: MatchCriterion.ADDRESS_FUZZY,
+        extractedValue: formatAddress(extraction.extractedFields.address),
+        matchedValue: formatAddress(claim.property),
+        score: CRITERION_WEIGHTS[MatchCriterion.ADDRESS_FUZZY] * addressScore,
+      });
+    }
+  }
+  
+  // 4. Person Name Match
+  if (extraction.extractedFields.persons?.length) {
+    const claimPersons = claim.contacts.map(c => c.name.toLowerCase());
+    for (const person of extraction.extractedFields.persons) {
+      const matchedPerson = claimPersons.find(
+        cp => fuzzyMatch(cp, person.toLowerCase()) >= 0.85
+      );
+      if (matchedPerson) {
+        reasons.push({
+          criterion: MatchCriterion.PERSON_NAME,
+          extractedValue: person,
+          matchedValue: matchedPerson,
+          score: CRITERION_WEIGHTS[MatchCriterion.PERSON_NAME],
+        });
+        break; // One match is enough
+      }
+    }
+  }
+  
+  // Calculate final score (take best match, not sum)
+  // This prevents low-confidence matches from stacking up
+  const finalScore = reasons.length > 0
+    ? Math.max(...reasons.map(r => r.score))
+    : 0;
+  
+  return { score: finalScore, reasons };
+}
+
+function compareAddresses(
+  extracted: { street?: string; zipCode?: string; city?: string },
+  property: Property
+): number {
+  let score = 0;
+  let weights = 0;
+  
+  // ZIP code is highly reliable
+  if (extracted.zipCode) {
+    weights += 0.4;
+    if (extracted.zipCode === property.zip) {
+      score += 0.4;
+    }
+  }
+  
+  // Street name with fuzzy match
+  if (extracted.street && property.address) {
+    weights += 0.4;
+    const streetScore = fuzzyMatch(
+      normalizeStreet(extracted.street),
+      normalizeStreet(property.address)
+    );
+    score += 0.4 * streetScore;
+  }
+  
+  // City
+  if (extracted.city && property.city) {
+    weights += 0.2;
+    if (extracted.city.toLowerCase() === property.city.toLowerCase()) {
+      score += 0.2;
+    }
+  }
+  
+  return weights > 0 ? score / weights : 0;
+}
+
+function fuzzyMatch(a: string, b: string): number {
+  // Levenshtein distance normalized to 0-1
+  const distance = levenshtein(a, b);
+  const maxLength = Math.max(a.length, b.length);
+  return 1 - (distance / maxLength);
+}
+```
+
+### H.4 Processing Pipeline (Supabase Edge Function)
+
+```typescript
+// supabase/functions/process-document/index.ts
+
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from '@supabase/supabase-js';
+
+serve(async (req) => {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+  
+  const { documentId } = await req.json();
+  
+  // 1. Get document
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('id', documentId)
+    .single();
+  
+  if (!doc) {
+    return new Response(JSON.stringify({ error: 'Document not found' }), {
+      status: 404,
+    });
+  }
+  
+  // 2. Update status to PROCESSING
+  await supabase
+    .from('documents')
+    .update({ ocr_status: 'PROCESSING' })
+    .eq('id', documentId);
+  
+  try {
+    // 3. Get signed URL for document
+    const { data: urlData } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(doc.storage_path, 3600);
+    
+    // 4. Call Azure Document Intelligence (via n8n or direct)
+    const ocrResult = await callAzureOCR(urlData.signedUrl);
+    
+    // 5. Store extraction result
+    const { data: extraction } = await supabase
+      .from('ocr_extractions')
+      .insert({
+        document_id: documentId,
+        raw_text: ocrResult.rawText,
+        extracted_fields: ocrResult.extractedFields,
+        confidence_scores: ocrResult.confidenceScores,
+        azure_operation_id: ocrResult.azureOperationId,
+        model_version: ocrResult.modelVersion,
+        processing_time_ms: ocrResult.processingTimeMs,
+      })
+      .select()
+      .single();
+    
+    // 6. Run matching engine (only if not already assigned)
+    if (!doc.claim_id) {
+      const matchResult = await findMatchingClaim(
+        ocrResult,
+        doc.tenant_id
+      );
+      
+      // 7. Store match decision
+      await supabase
+        .from('match_decisions')
+        .insert({
+          document_id: documentId,
+          suggested_claim_id: matchResult.bestMatch?.claimId,
+          match_score: matchResult.bestMatch?.score || 0,
+          match_reasons: matchResult.bestMatch?.matchReasons || [],
+          status: matchResult.assignmentType === 'AUTO' ? 'ACCEPTED' : 'PENDING',
+          final_claim_id: matchResult.assignmentType === 'AUTO' 
+            ? matchResult.bestMatch?.claimId 
+            : null,
+        });
+      
+      // 8. Auto-assign if above threshold
+      if (matchResult.assignmentType === 'AUTO' && matchResult.bestMatch) {
+        await supabase
+          .from('documents')
+          .update({
+            claim_id: matchResult.bestMatch.claimId,
+            match_status: 'AUTO',
+            match_confidence: matchResult.bestMatch.score,
+            folder_id: await determineFolder(
+              matchResult.bestMatch.claimId,
+              ocrResult.documentType
+            ),
+          })
+          .eq('id', documentId);
+        
+        // Create timeline event
+        await supabase
+          .from('timeline_events')
+          .insert({
+            claim_id: matchResult.bestMatch.claimId,
+            event_type: 'DOC_UPLOAD',
+            title: `Dokument automatisch zugeordnet: ${doc.filename}`,
+            metadata: {
+              document_id: documentId,
+              match_score: matchResult.bestMatch.score,
+              match_reasons: matchResult.bestMatch.matchReasons,
+            },
+          });
+      }
+    }
+    
+    // 9. Update document with results
+    await supabase
+      .from('documents')
+      .update({
+        ocr_status: 'DONE',
+        ocr_extraction_id: extraction.id,
+        doc_type: ocrResult.documentType,
+      })
+      .eq('id', documentId);
+    
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+    });
+    
+  } catch (error) {
+    // Mark as failed
+    await supabase
+      .from('documents')
+      .update({ ocr_status: 'FAILED' })
+      .eq('id', documentId);
+    
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+    });
+  }
+});
+```
+
+### H.5 Review Queue UI
+
+```tsx
+// app/inbox/page.tsx
+
+export default function DocumentInboxPage() {
+  const { data: reviewDocs } = trpc.documents.getReviewQueue.useQuery();
+  const { data: unassignedDocs } = trpc.documents.getUnassigned.useQuery();
+  const assignMutation = trpc.documents.assignToClaim.useMutation();
+  
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Dokument-Inbox</h1>
+      
+      {/* Review Queue */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CircleDot className="h-5 w-5 text-status-yellow" />
+            Zur Prüfung ({reviewDocs?.length || 0})
+          </CardTitle>
+          <CardDescription>
+            Dokumente mit Zuordnungsvorschlag - bitte bestätigen oder korrigieren
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {reviewDocs?.map(doc => (
+              <ReviewDocumentCard
+                key={doc.id}
+                document={doc}
+                onAccept={(claimId) => assignMutation.mutate({
+                  documentId: doc.id,
+                  claimId,
+                  decision: 'ACCEPTED',
+                })}
+                onReject={() => assignMutation.mutate({
+                  documentId: doc.id,
+                  claimId: null,
+                  decision: 'REJECTED',
+                })}
+                onManualAssign={(claimId) => assignMutation.mutate({
+                  documentId: doc.id,
+                  claimId,
+                  decision: 'MANUAL',
+                })}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Unassigned */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-sws-gray" />
+            Nicht zugeordnet ({unassignedDocs?.length || 0})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {unassignedDocs?.map(doc => (
+              <UnassignedDocumentCard
+                key={doc.id}
+                document={doc}
+                onAssign={(claimId) => assignMutation.mutate({
+                  documentId: doc.id,
+                  claimId,
+                  decision: 'MANUAL',
+                })}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ReviewDocumentCard({ document, onAccept, onReject, onManualAssign }) {
+  const [showClaimPicker, setShowClaimPicker] = useState(false);
+  
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="font-medium">{document.filename}</p>
+          <p className="text-sm text-sws-gray">
+            Hochgeladen: {formatDate(document.uploaded_at)}
+          </p>
+        </div>
+        <Badge variant="outline">
+          {(document.match_confidence * 100).toFixed(0)}% Konfidenz
+        </Badge>
+      </div>
+      
+      {/* Extracted Info Preview */}
+      <div className="bg-sws-bg rounded p-3 text-sm">
+        <p><strong>Erkannt:</strong></p>
+        <ul className="list-disc list-inside">
+          {document.extraction?.extractedFields?.projectNumber && (
+            <li>Projektnr: {document.extraction.extractedFields.projectNumber}</li>
+          )}
+          {document.extraction?.extractedFields?.address && (
+            <li>Adresse: {formatAddress(document.extraction.extractedFields.address)}</li>
+          )}
+          {document.extraction?.documentType && (
+            <li>Typ: {document.extraction.documentType}</li>
+          )}
+        </ul>
+      </div>
+      
+      {/* Suggested Claim */}
+      {document.suggestedClaim && (
+        <div className="border-l-4 border-sws-green pl-3">
+          <p className="text-sm font-medium">Vorgeschlagener Schaden:</p>
+          <p>{document.suggestedClaim.erpProjectNumber} - {document.suggestedClaim.property.address}</p>
+          <p className="text-xs text-sws-gray">
+            Match-Gründe: {document.matchReasons.map(r => r.criterion).join(', ')}
+          </p>
+        </div>
+      )}
+      
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={() => onAccept(document.suggestedClaim?.id)}
+          disabled={!document.suggestedClaim}
+        >
+          <Check className="h-4 w-4 mr-1" />
+          Bestätigen
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowClaimPicker(true)}
+        >
+          Anderen Schaden wählen
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onReject}
+        >
+          Ablehnen
+        </Button>
+      </div>
+      
+      {/* Claim Picker Modal */}
+      {showClaimPicker && (
+        <ClaimPickerDialog
+          onSelect={(claimId) => {
+            onManualAssign(claimId);
+            setShowClaimPicker(false);
+          }}
+          onClose={() => setShowClaimPicker(false)}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+### H.6 DocumentType-to-Folder Mapping
+
+```typescript
+// config/folder-mapping.ts
+
+const DOC_TYPE_FOLDER_MAP: Record<DocumentType, {
+  folderType: string;
+  phaseAffinity?: ClaimPhase;
+}> = {
+  [DocumentType.SCHADENMELDUNG]: { folderType: 'STAMMDATEN' },
+  [DocumentType.VOLLMACHT]: { folderType: 'STAMMDATEN' },
+  
+  [DocumentType.LO_PROTOKOLL]: { folderType: 'PHASE', phaseAffinity: ClaimPhase.LO },
+  [DocumentType.LB_PROTOKOLL]: { folderType: 'PHASE', phaseAffinity: ClaimPhase.LB },
+  [DocumentType.TROCKNUNGSPROTOKOLL]: { folderType: 'PHASE', phaseAffinity: ClaimPhase.TR },
+  [DocumentType.MESSWERTE]: { folderType: 'PHASE', phaseAffinity: ClaimPhase.TR },
+  [DocumentType.ABNAHMEPROTOKOLL]: { folderType: 'PHASE', phaseAffinity: ClaimPhase.WH },
+  
+  [DocumentType.ANGEBOT]: { folderType: 'PHASE' }, // Determined by current phase
+  [DocumentType.RECHNUNG]: { folderType: 'PHASE' }, // Determined by current phase
+  
+  [DocumentType.GUTACHTEN]: { folderType: 'GUTACHTEN' },
+  [DocumentType.KORRESPONDENZ]: { folderType: 'KORRESPONDENZ' },
+  [DocumentType.FOTO]: { folderType: 'PHASE' }, // Subfolder
+  
+  [DocumentType.SONSTIGES]: { folderType: 'KORRESPONDENZ' },
+};
+
+export async function determineFolder(
+  claimId: string,
+  docType: DocumentType,
+  currentPhase?: ClaimPhase
+): Promise<string> {
+  const mapping = DOC_TYPE_FOLDER_MAP[docType];
+  
+  // Get claim's folders
+  const folders = await getFoldersForClaim(claimId);
+  
+  if (mapping.folderType === 'PHASE') {
+    const targetPhase = mapping.phaseAffinity || currentPhase;
+    const folder = folders.find(
+      f => f.folder_type === 'PHASE' && f.phase_affinity === targetPhase
+    );
+    return folder?.id || folders.find(f => f.folder_type === 'KORRESPONDENZ')!.id;
+  }
+  
+  const folder = folders.find(f => f.folder_type === mapping.folderType);
+  return folder?.id || folders[0].id;
+}
+```
+
+---
+
+## I) Benachrichtigungen & Kommunikation
+
+### I.1 Notification Types & Channels
+
+| Event Type | In-App | E-Mail | Configurable |
+|------------|:------:|:------:|:------------:|
+| Schaden angelegt | ✅ | ✅ | ❌ (immer) |
+| Status geändert | ✅ | ⚙️ | ✅ |
+| Dokument hochgeladen | ✅ | ❌ | ❌ |
+| Kommentar / @Mention | ✅ | ✅ | ✅ |
+| Termin in 24h | ✅ | ✅ | ✅ |
+| SLA Warnung (gelb) | ✅ | ⚙️ | ✅ |
+| SLA Kritisch (rot) | ✅ | ✅ | ❌ (immer) |
+| Freigabe erforderlich | ✅ | ✅ | ❌ (immer) |
+| Angebot/Rechnung Status | ✅ | ⚙️ | ✅ |
+
+**Legende:** ✅ = Aktiv | ⚙️ = Default aus, konfigurierbar | ❌ = Nicht verfügbar
+
+### I.2 Notification Preferences Schema
+
+```sql
+CREATE TABLE notification_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    channel VARCHAR(20) NOT NULL, -- 'in_app', 'email'
+    enabled BOOLEAN DEFAULT true,
+    frequency VARCHAR(20) DEFAULT 'immediate', -- 'immediate', 'daily_digest', 'weekly_digest'
+    UNIQUE(user_id, event_type, channel)
+);
+
+-- Default preferences on user creation
+CREATE OR REPLACE FUNCTION create_default_notification_prefs()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO notification_preferences (user_id, event_type, channel, enabled)
+    VALUES
+        (NEW.id, 'STATUS_CHANGE', 'in_app', true),
+        (NEW.id, 'STATUS_CHANGE', 'email', false),
+        (NEW.id, 'COMMENT_MENTION', 'in_app', true),
+        (NEW.id, 'COMMENT_MENTION', 'email', true),
+        (NEW.id, 'SLA_WARNING', 'in_app', true),
+        (NEW.id, 'SLA_WARNING', 'email', false),
+        (NEW.id, 'SLA_CRITICAL', 'in_app', true),
+        (NEW.id, 'SLA_CRITICAL', 'email', true),
+        (NEW.id, 'APPOINTMENT_REMINDER', 'in_app', true),
+        (NEW.id, 'APPOINTMENT_REMINDER', 'email', true);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### I.3 Notification Service
+
+```typescript
+// services/notification.service.ts
+
+interface NotificationPayload {
+  eventType: NotificationEventType;
+  recipientIds: string[];
+  claimId?: string;
+  title: string;
+  body: string;
+  metadata?: Record<string, any>;
+  actionUrl?: string;
+}
+
+export async function sendNotification(payload: NotificationPayload) {
+  for (const recipientId of payload.recipientIds) {
+    // Get user preferences
+    const prefs = await getNotificationPreferences(recipientId);
+    
+    // In-App Notification (always check preference)
+    if (prefs.get(payload.eventType, 'in_app')?.enabled) {
+      await createInAppNotification({
+        user_id: recipientId,
+        event_type: payload.eventType,
+        claim_id: payload.claimId,
+        title: payload.title,
+        body: payload.body,
+        action_url: payload.actionUrl,
+        metadata: payload.metadata,
+      });
+    }
+    
+    // Email Notification
+    const emailPref = prefs.get(payload.eventType, 'email');
+    if (emailPref?.enabled) {
+      if (emailPref.frequency === 'immediate') {
+        await queueEmail({
+          to: await getUserEmail(recipientId),
+          template: 'notification',
+          data: payload,
+        });
+      } else {
+        // Add to digest queue
+        await addToDigestQueue(recipientId, payload, emailPref.frequency);
+      }
+    }
+  }
+}
+
+// Specific notification triggers
+export async function notifyStatusChange(
+  claim: Claim,
+  fromStatus: PortalStatus,
+  toStatus: PortalStatus
+) {
+  const recipients = await getClaimNotificationRecipients(claim.id);
+  
+  await sendNotification({
+    eventType: 'STATUS_CHANGE',
+    recipientIds: recipients,
+    claimId: claim.id,
+    title: `Status geändert: ${claim.erpProjectNumber}`,
+    body: `${formatStatus(fromStatus)} → ${formatStatus(toStatus)}`,
+    actionUrl: `/claims/${claim.id}`,
+  });
+}
+
+export async function notifyMention(
+  comment: Comment,
+  mentionedUserIds: string[]
+) {
+  const author = await getUser(comment.author_id);
+  
+  await sendNotification({
+    eventType: 'COMMENT_MENTION',
+    recipientIds: mentionedUserIds,
+    claimId: comment.claim_id,
+    title: `${author.name} hat Sie erwähnt`,
+    body: truncate(comment.content, 100),
+    actionUrl: `/claims/${comment.claim_id}?tab=timeline#comment-${comment.id}`,
+  });
+}
+
+export async function notifySLAWarning(
+  claim: Claim,
+  phase: Phase,
+  severity: 'WARNING' | 'CRITICAL'
+) {
+  const recipients = await getClaimNotificationRecipients(claim.id);
+  
+  await sendNotification({
+    eventType: severity === 'CRITICAL' ? 'SLA_CRITICAL' : 'SLA_WARNING',
+    recipientIds: recipients,
+    claimId: claim.id,
+    title: severity === 'CRITICAL' 
+      ? `🔴 SLA überschritten: ${claim.erpProjectNumber}`
+      : `🟡 SLA Warnung: ${claim.erpProjectNumber}`,
+    body: `Phase ${formatPhase(phase.phase_type)} - ${phase.sla_deadline ? formatDate(phase.sla_deadline) : 'Frist überfällig'}`,
+    actionUrl: `/claims/${claim.id}`,
+  });
+}
+```
+
+### I.4 Comment/Thread System
+
+```typescript
+// components/comments/comment-input.tsx
+
+export function CommentInput({ claimId, onSubmit }) {
+  const [content, setContent] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  
+  const { data: claimContacts } = trpc.claims.getContacts.useQuery({ claimId });
+  
+  const handleContentChange = (value: string) => {
+    setContent(value);
+    
+    // Detect @mention trigger
+    const lastAtIndex = value.lastIndexOf('@');
+    if (lastAtIndex !== -1) {
+      const searchTerm = value.slice(lastAtIndex + 1);
+      if (searchTerm.length > 0 && !searchTerm.includes(' ')) {
+        setMentionSearch(searchTerm);
+        setShowMentionPopup(true);
+      } else {
+        setShowMentionPopup(false);
+      }
+    }
+  };
+  
+  const insertMention = (user: User) => {
+    const lastAtIndex = content.lastIndexOf('@');
+    const newContent = content.slice(0, lastAtIndex) + `@[${user.name}](${user.id}) `;
+    setContent(newContent);
+    setShowMentionPopup(false);
+  };
+  
+  const handleSubmit = async () => {
+    // Extract mentions from content
+    const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+    const mentions: string[] = [];
+    let match;
+    while ((match = mentionRegex.exec(content)) !== null) {
+      mentions.push(match[2]); // user_id
+    }
+    
+    // Upload attachments first
+    const attachmentIds = await uploadAttachments(attachments, claimId);
+    
+    await onSubmit({
+      content,
+      mentions,
+      attachments: attachmentIds,
+    });
+    
+    setContent('');
+    setAttachments([]);
+  };
+  
+  return (
+    <div className="relative">
+      <Textarea
+        value={content}
+        onChange={(e) => handleContentChange(e.target.value)}
+        placeholder="Kommentar schreiben... @Name für Erwähnung"
+        className="min-h-[100px]"
+      />
+      
+      {/* Mention Popup */}
+      {showMentionPopup && (
+        <div className="absolute bg-white border rounded shadow-lg mt-1 max-h-48 overflow-auto">
+          {claimContacts
+            ?.filter(c => c.name.toLowerCase().includes(mentionSearch.toLowerCase()))
+            .map(contact => (
+              <button
+                key={contact.id}
+                onClick={() => insertMention(contact)}
+                className="w-full px-3 py-2 text-left hover:bg-sws-bg"
+              >
+                {contact.name}
+              </button>
+            ))}
+        </div>
+      )}
+      
+      {/* Attachment Preview */}
+      {attachments.length > 0 && (
+        <div className="flex gap-2 mt-2">
+          {attachments.map((file, i) => (
+            <Badge key={i} variant="secondary">
+              📎 {file.name}
+              <button onClick={() => removeAttachment(i)}>×</button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      
+      {/* Actions */}
+      <div className="flex justify-between mt-2">
+        <div>
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setAttachments([...attachments, ...e.target.files])}
+            className="hidden"
+            id="attachment-input"
+          />
+          <label htmlFor="attachment-input" className="cursor-pointer">
+            <Paperclip className="h-5 w-5 text-sws-gray hover:text-sws-green" />
+          </label>
+        </div>
+        <Button onClick={handleSubmit} disabled={!content.trim()}>
+          Senden
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## J) Sicherheit, Compliance, Audit
+
+### J.1 Multi-Tenant Isolation
+
+```sql
+-- Row Level Security (RLS) Policies
+
+-- Enable RLS on all tenant-scoped tables
+ALTER TABLE claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE timeline_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_items ENABLE ROW LEVEL SECURITY;
+
+-- Tenant Context Function
+CREATE OR REPLACE FUNCTION get_current_tenant_id()
+RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_tenant_id', TRUE), '')::UUID;
+EXCEPTION
+    WHEN OTHERS THEN RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Claims Policy
+CREATE POLICY "tenant_claims" ON claims
+    FOR ALL
+    USING (
+        tenant_id = get_current_tenant_id()
+        OR EXISTS (
+            SELECT 1 FROM users u
+            WHERE u.id = auth.uid()
+            AND u.role = 'SYSTEM_ADMIN'
+        )
+    );
+
+-- Documents Policy (follows claim)
+CREATE POLICY "tenant_documents" ON documents
+    FOR ALL
+    USING (
+        tenant_id = get_current_tenant_id()
+        OR EXISTS (
+            SELECT 1 FROM claims c
+            WHERE c.id = documents.claim_id
+            AND c.tenant_id = get_current_tenant_id()
+        )
+        OR EXISTS (
+            SELECT 1 FROM users u
+            WHERE u.id = auth.uid()
+            AND u.role = 'SYSTEM_ADMIN'
+        )
+    );
+
+-- Reviewer Cross-Tenant Access
+CREATE POLICY "reviewer_claims" ON claims
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM claim_reviewers cr
+            WHERE cr.claim_id = claims.id
+            AND cr.user_id = auth.uid()
+            AND cr.active = true
+        )
+    );
+```
+
+### J.2 Document Access Control
+
+```typescript
+// middleware/document-access.ts
+
+export async function checkDocumentAccess(
+  documentId: string,
+  userId: string,
+  action: 'VIEW' | 'DOWNLOAD' | 'DELETE'
+): Promise<boolean> {
+  const user = await getUser(userId);
+  const document = await getDocument(documentId);
+  
+  if (!document) return false;
+  
+  // System Admin: full access
+  if (user.role === 'SYSTEM_ADMIN') return true;
+  
+  // Integration Account: full access
+  if (user.role === 'INTEGRATION') return true;
+  
+  // Get claim for document
+  const claim = document.claim_id 
+    ? await getClaim(document.claim_id)
+    : null;
+  
+  // Tenant match
+  if (claim?.tenant_id === user.tenant_id) {
+    // Tenant Admin: full access
+    if (user.role === 'TENANT_ADMIN') return true;
+    
+    // Member: view/download only
+    if (user.role === 'MEMBER') {
+      return action !== 'DELETE';
+    }
+    
+    // Viewer: view only
+    if (user.role === 'VIEWER') {
+      return action === 'VIEW';
+    }
+  }
+  
+  // Reviewer: check assignment
+  if (user.role === 'REVIEWER' && claim) {
+    const isAssigned = await isReviewerAssignedToClaim(userId, claim.id);
+    if (isAssigned) {
+      return action !== 'DELETE';
+    }
+  }
+  
+  return false;
+}
+```
+
+### J.3 DSGVO Compliance
+
+#### Data Retention Policy
+
+```typescript
+// config/retention-policy.ts
+
+const RETENTION_POLICIES = {
+  claims: {
+    activeRetention: null, // Keep while active
+    completedRetention: '10 years', // Legal requirement for financial docs
+    deletionStrategy: 'SOFT_DELETE_THEN_HARD',
+  },
+  documents: {
+    activeRetention: null,
+    completedRetention: '10 years',
+    deletionStrategy: 'ANONYMIZE_PERSONAL_DATA',
+  },
+  comments: {
+    activeRetention: null,
+    completedRetention: '10 years',
+    deletionStrategy: 'SOFT_DELETE',
+  },
+  auditLogs: {
+    activeRetention: null,
+    completedRetention: '10 years',
+    deletionStrategy: 'KEEP', // Never delete audit logs
+  },
+  notifications: {
+    activeRetention: null,
+    completedRetention: '1 year',
+    deletionStrategy: 'HARD_DELETE',
+  },
+};
+```
+
+#### Data Subject Rights Implementation
+
+```typescript
+// services/gdpr.service.ts
+
+interface DataSubjectRequest {
+  type: 'ACCESS' | 'RECTIFICATION' | 'ERASURE' | 'PORTABILITY';
+  subjectEmail: string;
+  requestedBy: string;
+  requestedAt: Date;
+}
+
+export async function handleDataSubjectRequest(request: DataSubjectRequest) {
+  switch (request.type) {
+    case 'ACCESS':
+      return generateDataExport(request.subjectEmail);
+    
+    case 'ERASURE':
+      return scheduleDataDeletion(request.subjectEmail);
+    
+    case 'PORTABILITY':
+      return generatePortableExport(request.subjectEmail);
+    
+    case 'RECTIFICATION':
+      // Manual process - create ticket
+      return createRectificationTicket(request);
+  }
+}
+
+async function generateDataExport(email: string): Promise<ExportResult> {
+  const userData = await db.query(`
+    SELECT 
+      u.*,
+      (SELECT json_agg(c.*) FROM claims c WHERE c.contacts @> '[{"email": $1}]') as claims,
+      (SELECT json_agg(d.*) FROM documents d WHERE d.uploaded_by = u.id) as documents,
+      (SELECT json_agg(co.*) FROM comments co WHERE co.author_id = u.id) as comments
+    FROM users u
+    WHERE u.email = $1
+  `, [email]);
+  
+  return {
+    format: 'JSON',
+    data: userData,
+    generatedAt: new Date(),
+    expiresAt: addDays(new Date(), 30),
+  };
+}
+
+async function scheduleDataDeletion(email: string): Promise<void> {
+  // 30-day grace period
+  await db.insert('deletion_requests', {
+    subject_email: email,
+    requested_at: new Date(),
+    scheduled_for: addDays(new Date(), 30),
+    status: 'PENDING',
+  });
+  
+  // Notify admins
+  await notifyAdminsOfDeletionRequest(email);
+}
+```
+
+### J.4 Audit Logging
+
+```sql
+-- Comprehensive audit log
+CREATE TABLE audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- What
+    action VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID,
+    
+    -- Who
+    actor_id UUID REFERENCES users(id),
+    actor_type VARCHAR(20) NOT NULL, -- 'USER', 'SYSTEM', 'INTEGRATION'
+    actor_tenant_id UUID,
+    
+    -- When
+    timestamp TIMESTAMP DEFAULT now(),
+    
+    -- Context
+    ip_address INET,
+    user_agent TEXT,
+    request_id VARCHAR(100),
+    
+    -- Details
+    old_values JSONB,
+    new_values JSONB,
+    metadata JSONB
+);
+
+-- Index for querying
+CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
+CREATE INDEX idx_audit_actor ON audit_log(actor_id);
+CREATE INDEX idx_audit_timestamp ON audit_log(timestamp);
+
+-- Automatic audit trigger factory
+CREATE OR REPLACE FUNCTION create_audit_trigger(table_name TEXT)
+RETURNS VOID AS $$
+BEGIN
+    EXECUTE format('
+        CREATE TRIGGER audit_%I
+        AFTER INSERT OR UPDATE OR DELETE ON %I
+        FOR EACH ROW EXECUTE FUNCTION log_audit_event()
+    ', table_name, table_name);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Generic audit function
+CREATE OR REPLACE FUNCTION log_audit_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO audit_log (
+        action,
+        entity_type,
+        entity_id,
+        actor_id,
+        actor_type,
+        old_values,
+        new_values
+    ) VALUES (
+        TG_OP,
+        TG_TABLE_NAME,
+        COALESCE(NEW.id, OLD.id),
+        auth.uid(),
+        CASE WHEN auth.uid() IS NULL THEN 'SYSTEM' ELSE 'USER' END,
+        CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) END,
+        CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) END
+    );
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Apply to sensitive tables
+SELECT create_audit_trigger('claims');
+SELECT create_audit_trigger('documents');
+SELECT create_audit_trigger('users');
+SELECT create_audit_trigger('comments');
+```
+
+---
+
+## K) KPI/Statistik-Definitionen
+
+### K.1 KPI Catalog
+
+| KPI ID | Name | Definition | Berechnung | Aggregation |
+|--------|------|------------|------------|-------------|
+| KPI-01 | Durchlaufzeit (Gesamt) | Zeit von Schadenanlage bis Abschluss aller Phasen | $\text{completed\_at} - \text{created\_at}$ | AVG, P50, P90 |
+| KPI-02 | Durchlaufzeit (Phase) | Zeit pro Phase | $\text{phase.completed\_at} - \text{phase.started\_at}$ | AVG, P50, P90 |
+| KPI-03 | SLA-Quote | % Phasen innerhalb SLA abgeschlossen | $\frac{\text{count(on\_time)}}{\text{count(total)}} \times 100$ | % |
+| KPI-04 | Schadenvolumen | Summe aller Rechnungsbeträge (netto) | $\sum \text{invoice.amount\_net}$ | SUM |
+| KPI-05 | Ø Schadenhöhe | Durchschnittlicher Rechnungsbetrag pro Schaden | $\frac{\text{KPI-04}}{\text{count(claims)}}$ | AVG |
+| KPI-06 | Offene Schäden | Anzahl nicht abgeschlossener Schäden | $\text{count(status} \neq \text{ABGESCHLOSSEN)}$ | COUNT |
+| KPI-07 | Kritische Schäden | Anzahl Schäden mit roter Ampel | $\text{count(traffic\_light} = \text{RED)}$ | COUNT |
+| KPI-08 | Freigabe-Wartezeit | Zeit von Angebotsversand bis Freigabe | AVG(approval_at - sent_at) | AVG |
+| KPI-09 | Dokument-Zuordnungsrate | % automatisch zugeordneter Dokumente | $\frac{\text{count(match\_status} = \text{AUTO)}}{\text{count(total)}} \times 100$ | % |
+| KPI-10 | Response Time | Zeit bis erste Aktivität nach Meldung | $\text{first\_event.created\_at} - \text{claim.created\_at}$ | AVG |
+
+### K.2 SQL Views für Statistiken
+
+```sql
+-- KPI-01 & KPI-02: Durchlaufzeiten
+CREATE VIEW v_claim_durations AS
+SELECT 
+    c.id as claim_id,
+    c.tenant_id,
+    c.created_at,
+    c.completed_at,
+    EXTRACT(EPOCH FROM (c.completed_at - c.created_at)) / 86400 as total_duration_days,
+    json_agg(json_build_object(
+        'phase', p.phase_type,
+        'duration_days', EXTRACT(EPOCH FROM (p.completed_at - p.started_at)) / 86400,
+        'sla_met', p.completed_at <= p.sla_deadline
+    )) as phase_durations
+FROM claims c
+LEFT JOIN phases p ON p.claim_id = c.id
+WHERE c.completed_at IS NOT NULL
+GROUP BY c.id;
+
+-- KPI-03: SLA Quote
+CREATE VIEW v_sla_performance AS
+SELECT 
+    tenant_id,
+    phase_type,
+    COUNT(*) as total_phases,
+    COUNT(*) FILTER (WHERE completed_at <= sla_deadline) as on_time,
+    ROUND(
+        COUNT(*) FILTER (WHERE completed_at <= sla_deadline)::NUMERIC / 
+        COUNT(*)::NUMERIC * 100, 
+        2
+    ) as sla_quote_percent
+FROM phases
+WHERE completed_at IS NOT NULL
+GROUP BY tenant_id, phase_type;
+
+-- KPI-04 & KPI-05: Schadenvolumen
+CREATE VIEW v_claim_financials AS
+SELECT 
+    c.id as claim_id,
+    c.tenant_id,
+    c.erp_project_number,
+    SUM(i.amount_net) as total_net,
+    SUM(i.amount_gross) as total_gross,
+    COUNT(i.id) as invoice_count
+FROM claims c
+LEFT JOIN invoices i ON i.claim_id = c.id AND i.type = 'INVOICE'
+GROUP BY c.id;
+
+-- KPI-07: Traffic Light Distribution
+CREATE VIEW v_traffic_light_distribution AS
+WITH claim_traffic_lights AS (
+    SELECT 
+        c.id,
+        c.tenant_id,
+        calculate_traffic_light(c.id) as traffic_light
+    FROM claims c
+    WHERE c.completed_at IS NULL
+)
+SELECT 
+    tenant_id,
+    traffic_light,
+    COUNT(*) as count
+FROM claim_traffic_lights
+GROUP BY tenant_id, traffic_light;
+
+-- KPI-09: Document Assignment Rate
+CREATE VIEW v_ocr_performance AS
+SELECT 
+    d.tenant_id,
+    DATE_TRUNC('month', d.uploaded_at) as month,
+    COUNT(*) as total_documents,
+    COUNT(*) FILTER (WHERE d.match_status = 'AUTO') as auto_assigned,
+    COUNT(*) FILTER (WHERE d.match_status = 'REVIEW') as review_queue,
+    COUNT(*) FILTER (WHERE d.match_status = 'MANUAL') as manually_assigned,
+    COUNT(*) FILTER (WHERE d.match_status = 'UNASSIGNED') as unassigned,
+    ROUND(
+        COUNT(*) FILTER (WHERE d.match_status = 'AUTO')::NUMERIC / 
+        NULLIF(COUNT(*), 0)::NUMERIC * 100,
+        2
+    ) as auto_assignment_rate_percent
+FROM documents d
+WHERE d.ocr_status = 'DONE'
+GROUP BY d.tenant_id, DATE_TRUNC('month', d.uploaded_at);
+```
+
+### K.3 Statistics API (tRPC)
+
+```typescript
+// server/routers/statistics.ts
+
+export const statisticsRouter = router({
+  getDashboard: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().uuid(),
+      dateFrom: z.date().optional(),
+      dateTo: z.date().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const { tenantId, dateFrom, dateTo } = input;
+      
+      // Verify tenant access
+      await assertTenantAccess(ctx.user, tenantId);
+      
+      const [
+        activeClaims,
+        trafficLightDist,
+        slaPerfomance,
+        avgDurations,
+        financials,
+        ocrPerformance,
+      ] = await Promise.all([
+        getActiveClaimsCount(tenantId),
+        getTrafficLightDistribution(tenantId),
+        getSLAPerformance(tenantId, dateFrom, dateTo),
+        getAverageDurations(tenantId, dateFrom, dateTo),
+        getFinancialSummary(tenantId, dateFrom, dateTo),
+        getOCRPerformance(tenantId, dateFrom, dateTo),
+      ]);
+      
+      return {
+        activeClaims,
+        trafficLight: {
+          green: trafficLightDist.GREEN || 0,
+          yellow: trafficLightDist.YELLOW || 0,
+          red: trafficLightDist.RED || 0,
+        },
+        sla: {
+          overall: slaPerfomance.overall,
+          byPhase: slaPerfomance.byPhase,
+        },
+        durations: {
+          avgTotalDays: avgDurations.total,
+          byPhase: avgDurations.byPhase,
+          p50: avgDurations.p50,
+          p90: avgDurations.p90,
+        },
+        financials: {
+          totalVolume: financials.totalNet,
+          avgClaimValue: financials.avgPerClaim,
+          openInvoices: financials.openInvoices,
+        },
+        ocr: {
+          autoAssignmentRate: ocrPerformance.autoRate,
+          reviewQueueSize: ocrPerformance.reviewQueue,
+        },
+      };
+    }),
+  
+  exportReport: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().uuid(),
+      reportType: z.enum(['CLAIMS', 'FINANCIALS', 'DURATIONS']),
+      format: z.enum(['CSV', 'XLSX']),
+      dateFrom: z.date(),
+      dateTo: z.date(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Check export permission
+      await assertPermission(ctx.user, 'stats:export');
+      
+      const data = await generateReportData(input);
+      const file = await formatReport(data, input.format);
+      
+      return {
+        downloadUrl: await uploadTempFile(file),
+        expiresAt: addHours(new Date(), 24),
+      };
+    }),
+});
+```
+
+---
+
+## L) Releaseplan
+
+### L.1 Phase 1: MVP (Wochen 1-8)
+
+**Ziel:** Funktionsfähiges Portal als Trello-Ersatz mit Basisfunktionalität
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          PHASE 1: MVP                                        │
+│                     Timeline: 8 Wochen                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  WOCHE 1-2: Foundation                                                     │
+│  ├─ [ ] Supabase Projekt Setup                                             │
+│  ├─ [ ] DB Schema (Core Tables)                                            │
+│  ├─ [ ] Auth (Supabase Auth + RBAC)                                        │
+│  ├─ [ ] tRPC Setup + Base Routers                                          │
+│  ├─ [ ] Next.js 14 + Shadcn/UI Setup                                       │
+│  └─ [ ] Tailwind Config (Design Tokens)                                    │
+│                                                                             │
+│  WOCHE 3-4: Core Features                                                  │
+│  ├─ [ ] Claim CRUD (Create, Read, Update)                                  │
+│  ├─ [ ] Property + Contact Management                                      │
+│  ├─ [ ] Status Model + Phase Logic                                         │
+│  ├─ [ ] Timeline Events (Portal-native)                                    │
+│  ├─ [ ] Map View (Leaflet + Markers)                                       │
+│  └─ [ ] List/Board View                                                    │
+│                                                                             │
+│  WOCHE 5-6: Documents & Communication                                      │
+│  ├─ [ ] Document Upload (Supabase Storage)                                 │
+│  ├─ [ ] Folder Structure (Auto-creation)                                   │
+│  ├─ [ ] Document Preview                                                   │
+│  ├─ [ ] Comments + Mentions                                                │
+│  └─ [ ] In-App Notifications                                               │
+│                                                                             │
+│  WOCHE 7-8: Polish & Deploy                                                │
+│  ├─ [ ] Traffic Light Logic                                                │
+│  ├─ [ ] Multi-Tenant Isolation (RLS)                                       │
+│  ├─ [ ] PWA Config                                                         │
+│  ├─ [ ] Vercel Deployment                                                  │
+│  ├─ [ ] E2E Tests (Critical Paths)                                         │
+│  └─ [ ] User Acceptance Testing                                            │
+│                                                                             │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  MVP DELIVERABLES:                                                         │
+│  ✓ Claim Management (CRUD)                                                 │
+│  ✓ Map + List + Board Views                                                │
+│  ✓ Document Upload + Folder Structure                                      │
+│  ✓ Comments + Timeline                                                     │
+│  ✓ Traffic Light Status                                                    │
+│  ✓ Multi-Tenant (Manual Setup)                                             │
+│  ✓ PWA (Mobile-friendly)                                                   │
+│                                                                             │
+│  NOT IN MVP:                                                                │
+│  ✗ ERP Integration                                                         │
+│  ✗ OCR/Auto-Assignment                                                     │
+│  ✗ Calendar Sync                                                           │
+│  ✗ Statistics Dashboard                                                    │
+│  ✗ Email Notifications                                                     │
+│  ✗ Offers/Invoices Module                                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### L.2 Phase 2: ERP Integration + OCR (Wochen 9-16)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 2: ERP DEEP INTEGRATION                            │
+│                     Timeline: 8 Wochen                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  WOCHE 9-10: n8n + ERP Sync Foundation                                     │
+│  ├─ [ ] n8n Setup (Self-hosted or Cloud)                                   │
+│  ├─ [ ] ERP Webhook Endpoints                                              │
+│  ├─ [ ] Status Sync Workflow (ERP→Portal)                                  │
+│  ├─ [ ] Idempotency + Conflict Handling                                    │
+│  └─ [ ] Sync Monitoring Dashboard                                          │
+│                                                                             │
+│  WOCHE 11-12: OCR Pipeline                                                 │
+│  ├─ [ ] Azure Document Intelligence Integration                            │
+│  ├─ [ ] Extraction Service (Edge Function)                                 │
+│  ├─ [ ] Matching Engine                                                    │
+│  ├─ [ ] Review Queue UI                                                    │
+│  └─ [ ] Auto-Assignment Workflow                                           │
+│                                                                             │
+│  WOCHE 13-14: Bidirectional Sync                                           │
+│  ├─ [ ] Document Sync (Portal→ERP)                                         │
+│  ├─ [ ] Comment Sync (Portal→ERP)                                          │
+│  ├─ [ ] Calendar Sync (ERP→Portal)                                         │
+│  ├─ [ ] Censored Timeline Logic                                            │
+│  └─ [ ] Offer/Invoice Display                                              │
+│                                                                             │
+│  WOCHE 15-16: Advanced Features                                            │
+│  ├─ [ ] Statistics Dashboard                                               │
+│  ├─ [ ] Email Notifications (n8n)                                          │
+│  ├─ [ ] Approval Workflows (SV/Regulierer)                                 │
+│  ├─ [ ] Bulk Operations                                                    │
+│  └─ [ ] Export Functions                                                   │
+│                                                                             │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  PHASE 2 DELIVERABLES:                                                     │
+│  ✓ Real-time ERP Sync                                                      │
+│  ✓ OCR Auto-Assignment (>85% accuracy)                                     │
+│  ✓ Calendar Integration                                                    │
+│  ✓ Offers/Invoices Module                                                  │
+│  ✓ Statistics Dashboard                                                    │
+│  ✓ Email Notifications                                                     │
+│  ✓ Full Audit Trail                                                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### L.3 Feature Dependencies
+
+```mermaid
+graph LR
+    subgraph Phase1[Phase 1 MVP]
+        A[Auth + RBAC] --> B[Claim CRUD]
+        B --> C[Map View]
+        B --> D[List/Board View]
+        B --> E[Document Upload]
+        E --> F[Folder Structure]
+        B --> G[Comments]
+        G --> H[In-App Notifications]
+        B --> I[Traffic Light]
+    end
+    
+    subgraph Phase2[Phase 2 ERP]
+        J[n8n Setup] --> K[ERP Status Sync]
+        K --> L[Censored Timeline]
+        J --> M[OCR Pipeline]
+        M --> N[Matching Engine]
+        N --> O[Review Queue]
+        K --> P[Calendar Sync]
+        K --> Q[Document Sync]
+        K --> R[Offers/Invoices]
+        L --> S[Statistics]
+    end
+    
+    Phase1 --> Phase2
+```
+
+### L.4 Risk Mitigation per Phase
+
+| Phase | Risk | Impact | Mitigation |
+|-------|------|--------|------------|
+| Phase 1 | Leaflet Performance bei vielen Markern | Medium | Clustering implementieren, Lazy Loading |
+| Phase 1 | Multi-Tenant RLS Complexity | High | RLS früh testen, Security Review |
+| Phase 2 | ERP API Verfügbarkeit | High | Mock-API für Entwicklung, Fallback auf manuelle Eingabe |
+| Phase 2 | OCR Accuracy < 85% | Medium | Confidence Threshold anpassen, Review Queue erweitern |
+| Phase 2 | Sync Konflikte | Medium | Conflict Resolution UI, ERP-Wins-Default |
+
+---
+
+## M) Offene Fragen / Annahmen / Risiken (ADR-Style)
+
+### ADR-001: ERP API Specification
+
+| | |
+|---|---|
+| **Status** | ⚠️ OFFEN |
+| **Kontext** | Das Framework basiert auf der Annahme einer REST/Webhook-basierten ERP-API. Die exakte Spezifikation ist nicht bekannt. |
+| **Annahmen** | - ERP kann Webhooks senden bei Status-Änderungen<br>- ERP hat REST-Endpoints für Dokument-Upload<br>- ERP kann Projektnummer als Identifier verwenden |
+| **Risiko** | Falls ERP keine Webhooks unterstützt: Polling nötig (Latenz, Ressourcen)<br>Falls ERP-API nicht dokumentiert: Reverse Engineering nötig |
+| **Aktion** | ERP-Team kontaktieren für API-Dokumentation vor Phase 2 Start |
+
+### ADR-002: OCR Model Training
+
+| | |
+|---|---|
+| **Status** | ⚠️ ENTSCHEIDUNG NÖTIG |
+| **Kontext** | Azure Document Intelligence bietet Prebuilt-Modelle. Für höhere Accuracy bei domänenspezifischen Dokumenten (LO-Protokoll, Angebot) könnten Custom Models nötig sein. |
+| **Option A** | Prebuilt Models only (schneller, günstiger, ~75-80% Accuracy) |
+| **Option B** | Custom Models für Top-5-Dokumenttypen (Aufwand: ~2 Wochen, ~90%+ Accuracy) |
+| **Empfehlung** | Start mit Prebuilt (Phase 2), Custom Models als Phase 3 Feature |
+
+### ADR-003: Tenant Onboarding
+
+| | |
+|---|---|
+| **Status** | ⚠️ OFFEN |
+| **Kontext** | MVP sieht manuelle Tenant-Erstellung vor. Skalierung erfordert Self-Service. |
+| **Fragen** | - Wer legt Tenants an? (SWS Admin vs. Self-Service)<br>- Wie erfolgt Billing? (pro User, pro Claim, Flat Fee)<br>- Braucht es Trial-Period? |
+| **Annahme** | Phase 1: SWS Admin legt Tenants manuell an. Self-Service in Phase 3. |
+
+### ADR-004: Document Storage Location
+
+| | |
+|---|---|
+| **Status** | ✅ ENTSCHIEDEN |
+| **Kontext** | Dokumente können in Supabase Storage oder ERP Storage liegen. |
+| **Entscheidung** | Supabase Storage als Primary für Portal-Uploads. ERP-Dokumente werden referenziert (URL), nicht kopiert. |
+| **Begründung** | - Vermeidet Storage-Duplikation<br>- ERP bleibt Source of Truth<br>- Portal kann Thumbnails/Preview cachen |
+
+### ADR-005: Reviewer Role Cross-Tenant
+
+| | |
+|---|---|
+| **Status** | ⚠️ RISIKO |
+| **Kontext** | Sachverständige/Regulierer benötigen Zugriff auf Schäden mehrerer Tenants. |
+| **Risiko** | RLS-Komplexität steigt. Potenzielle Security Vulnerabilities bei Fehlkonfiguration. |
+| **Mitigation** | - Explizite `claim_reviewers` Junction Table<br>- Quarterly Security Audit für Cross-Tenant Access<br>- Logging aller Cross-Tenant Zugriffe |
+
+### ADR-006: Mobile App Strategy
+
+| | |
+|---|---|
+| **Status** | ✅ ENTSCHIEDEN |
+| **Options** | Native iOS/Android vs. React Native vs. PWA |
+| **Entscheidung** | PWA first (Phase 1+2). React Native nur bei nachgewiesenem Bedarf (Push Notifications, Offline-First). |
+| **Begründung** | - Schnellere Time-to-Market<br>- Einheitliche Codebase<br>- Zielgruppe nutzt primär Desktop |
+
+### ADR-007: Traffic Light Persistence
+
+| | |
+|---|---|
+| **Status** | ⚠️ ENTSCHEIDUNG NÖTIG |
+| **Kontext** | Traffic Light kann live berechnet oder materialisiert (DB) werden. |
+| **Option A** | Live Calculation (immer aktuell, aber Latenz bei vielen Claims) |
+| **Option B** | Materialized (schnell, aber Sync-Delay) |
+| **Empfehlung** | Hybrid: Live für Detailseite, Materialized View für Map/Liste (5-min Refresh) |
+
+### ADR-008: Notification Delivery Guarantee
+
+| | |
+|---|---|
+| **Status** | ⚠️ OFFEN |
+| **Kontext** | In-App Notifications sind einfach, E-Mail erfordert zuverlässige Delivery. |
+| **Fragen** | - Welcher E-Mail Provider? (Resend, SendGrid, SES)<br>- Bounce/Complaint Handling?<br>- DKIM/SPF Setup für sws-fm.de Domain? |
+| **Annahme** | Phase 1: Resend (einfach, günstig). Migration zu Enterprise Provider in Phase 3. |
+
+---
+
+## Anhänge
+
+<details>
+<summary><strong>Anhang A: API Routes (tRPC)</strong></summary>
+
+```typescript
+// Complete tRPC Router Structure
+
+export const appRouter = router({
+  // Auth
+  auth: authRouter, // login, logout, refresh, me
+  
+  // Claims
+  claims: claimsRouter,
+  // - list, get, create, update, delete
+  // - getTimeline, getContacts, getPhases
+  // - updateStatus (internal, triggers sync to ERP)
+  
+  // Documents
+  documents: documentsRouter,
+  // - list, get, upload, delete
+  // - getVersions, assignToClaim, unassign
+  // - getReviewQueue, getUnassigned
+  // - bulkAssign
+  
+  // Comments
+  comments: commentsRouter,
+  // - list, create, update, delete
+  // - getThread
+  
+  // Calendar
+  calendar: calendarRouter,
+  // - list (by date range), get
+  // - sync (admin only)
+  
+  // Finance
+  finance: financeRouter,
+  // - getOffers, getInvoices
+  // - approve, reject (reviewer only)
+  
+  // Statistics
+  statistics: statisticsRouter,
+  // - getDashboard, exportReport
+  
+  // Notifications
+  notifications: notificationsRouter,
+  // - list, markRead, markAllRead
+  // - getPreferences, updatePreferences
+  
+  // Admin
+  admin: adminRouter,
+  // - getTenants, createTenant, updateTenant
+  // - getUsers, createUser, updateUser, deleteUser
+  // - getSyncStatus, triggerSync
+});
+```
+
+</details>
+
+<details>
+<summary><strong>Anhang B: Environment Variables</strong></summary>
+
+```bash
+# .env.example
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Azure Document Intelligence
+AZURE_DI_ENDPOINT=https://xxx.cognitiveservices.azure.com
+AZURE_DI_KEY=xxx
+
+# n8n
+N8N_WEBHOOK_URL=https://n8n.example.com/webhook
+N8N_API_KEY=xxx
+
+# ERP Integration
+ERP_API_URL=https://erp.example.com/api
+ERP_API_TOKEN=xxx
+ERP_WEBHOOK_SECRET=xxx
+
+# Email (Resend)
+RESEND_API_KEY=re_xxx
+
+# App Config
+NEXT_PUBLIC_APP_URL=https://schadenradar.example.com
+```
+
+</details>
+
+<details>
+<summary><strong>Anhang C: Database Migrations (Initial)</strong></summary>
+
+```sql
+-- 001_initial_schema.sql
+
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy search
+
+-- Enums
+CREATE TYPE user_role AS ENUM (
+    'SYSTEM_ADMIN', 'TENANT_ADMIN', 'MEMBER', 'VIEWER', 'REVIEWER', 'INTEGRATION'
+);
+
+CREATE TYPE claim_phase AS ENUM ('LO', 'LB', 'RB', 'TR', 'WH');
+
+CREATE TYPE portal_status AS ENUM (
+    'TERMIN_OFFEN', 'TERMIN_GEPLANT', 'VOR_ORT_ERFOLGT', 'DOKUMENTATION',
+    'FREIGABE_AUSSTEHEND', 'IN_DURCHFUEHRUNG', 'ABNAHME', 'ABRECHNUNG', 'ABGESCHLOSSEN'
+);
+
+CREATE TYPE document_type AS ENUM (
+    'SCHADENMELDUNG', 'VOLLMACHT', 'KORRESPONDENZ', 'FOTO',
+    'LO_PROTOKOLL', 'LB_PROTOKOLL', 'TROCKNUNGSPROTOKOLL', 'MESSWERTE', 'ABNAHMEPROTOKOLL',
+    'ANGEBOT', 'RECHNUNG', 'GUTACHTEN', 'SONSTIGES'
+);
+
+CREATE TYPE match_status AS ENUM ('AUTO', 'REVIEW', 'MANUAL', 'UNASSIGNED');
+CREATE TYPE ocr_status AS ENUM ('PENDING', 'PROCESSING', 'DONE', 'FAILED');
+CREATE TYPE priority AS ENUM ('NORMAL', 'HIGH', 'CRITICAL');
+CREATE TYPE traffic_light AS ENUM ('GREEN', 'YELLOW', 'RED');
+
+-- Tables (see Section C for full schema)
+-- ... (create tables as specified in Datenmodell)
+
+-- RLS Policies (see Section J)
+-- ... (apply policies)
+
+-- Triggers
+-- ... (audit logging, folder creation, etc.)
+```
+
+</details>
+
+---
+
+**Ende des Dokuments**
+
+*Dieses Framework ist ein lebendes Dokument. Updates werden versioniert und in ADR-Format dokumentiert.*

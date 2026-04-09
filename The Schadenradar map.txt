@@ -1,0 +1,44 @@
+The "Schadenradar" map in your dashboard is a custom implementation that combines a mapping library with some clever data simulation to create a "live" feel without needing a complex backend geocoding service yet.
+
+Here is the detailed breakdown of how it works:
+
+1. The Core Engine: react-leaflet
+The interactive map is built using Leaflet, the industry-standard open-source JavaScript library for mobile-friendly interactive maps. We use the React wrapper react-leaflet.
+
+MapContainer: This is the top-level standard component that initializes the map instance. We anchor it to Koblenz (CENTER = [50.3569, 7.5938]) and set a default zoom level of 13.
+TileLayer: This acts as the "skin" of the map. We use CartoDB Light tiles (cartocdn.com/light_all) instead of the default OpenStreetMap look. This gives us that clean, professional "Apple Maps" aesthetic that fits your corporate design (gray/white tones instead of chaotic colors).
+2. The "Fake" GPS System (Stable Hashing)
+Since your database doesn't currently store Latitude/Longitude coordinates for every project, I wrote a smart simulation engine inside the useMemo hook for markers.
+
+Instead of placing points randomly (which would jump around every time you refresh), I generate Pseudo-Geocoding:
+
+It takes the Project ID + Street + City strings.
+It converts them into a numeric "Hash".
+It uses that hash to mathematically calculate a fixed offset from the center of Koblenz.
+The Result: A specific address like "Musterstraße 12" will always appear in the exact same spot on the map, giving the illusion of a real GPS lock without needing a Google Maps API key or geocoding service.
+
+3. Custom Pulsing Radar Icons
+Standard map pins look boring. We use L.divIcon to render custom HTML & CSS markers directly onto the canvas.
+
+The Code: Inside 
+createIcon()
+, we generate HTML strings:
+html
+<div class="relative flex items-center justify-center w-6 h-6">
+   <!-- The Pulsing Ring (Ping Animation) -->
+   <div class="absolute ... animate-ping opacity-75" style="background-color: #ef4444"></div>
+   <!-- The Solid Dot -->
+   <div class="relative ... rounded-full border-2 border-white shadow-md"></div>
+</div>
+Logic:
+If priority is High, it renders Red (#ef4444).
+If priority is Normal, it renders SWS Green (#84bc47).
+If the status is "Open", it adds the animate-ping class to make it pulse like a radar blip.
+4. The "Glassmorphism" UI Layer
+The Dashboard isn't just a map; the UI floats on top of it.
+
+We use absolute positioning (absolute top-0, absolute bottom-0) for the Header and Footer.
+The "Frost" Effect: The panels use backdrop-blur-md and bg-white/90. This creates that premium frosted glass look where the map blurs slightly behind the controls.
+pointer-events-none is used on the container so clicks pass through to the map, while pointer-events-auto is restored on the buttons so they remain clickable.
+Summary
+In short: It's a fully functional interactive map that visualizes your database records in real-time. It uses a custom coordinate generator to map addresses to fixed points

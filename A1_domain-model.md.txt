@@ -1,0 +1,1045 @@
+# A1_domain-model.md
+
+---
+
+## Inhaltsverzeichnis
+
+1. [Entities](#entities)
+2. [Entity-Relationship-Diagramm](#entity-relationship-diagramm)
+3. [Business Rules](#business-rules)
+4. [Glossar](#glossar)
+
+---
+
+# Entities
+
+---
+
+## 1. Tenant
+
+**Zweck:** Repräsentiert eine Multiplikator-Organisation (Hausverwaltung, Versicherungsagentur, Makler, Kommune etc.). Bildet die Grundlage der Mandantenfähigkeit.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP-System |
+| `name` | `VARCHAR(255)` | ✓ | Organisationsname |
+| `type` | `ENUM` | ✓ | Typ: `HAUSVERWALTUNG`, `VERSICHERUNG`, `MAKLER`, `REGULIERER`, `SACHVERSTAENDIGER`, `KOMMUNE`, `BAUBIOLOGE`, `SONSTIGE` |
+| `address_street` | `VARCHAR(255)` | ✗ | Straße und Hausnummer |
+| `address_zip` | `VARCHAR(10)` | ✗ | Postleitzahl |
+| `address_city` | `VARCHAR(100)` | ✗ | Stadt |
+| `contact_email` | `VARCHAR(255)` | ✓ | Haupt-E-Mail-Adresse |
+| `contact_phone` | `VARCHAR(50)` | ✗ | Telefonnummer |
+| `logo_url` | `VARCHAR(500)` | ✗ | URL zum Logo |
+| `is_active` | `BOOLEAN` | ✓ | Aktiv-Status (Default: `true`) |
+| `settings` | `JSONB` | ✗ | Mandantenspezifische Einstellungen |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `users` | 1:n | User | Benutzer des Mandanten |
+| `claims` | 1:n | Claim | Schäden des Mandanten |
+| `properties` | 1:n | Property | Verwaltete Objekte |
+| `contacts` | 1:n | Contact | Kontakte des Mandanten |
+
+---
+
+## 2. User
+
+**Zweck:** Benutzer des Systems. Kann einem Mandanten zugeordnet oder interner SüdWest-Mitarbeiter sein.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel (= Supabase Auth UID) |
+| `tenant_id` | `UUID` | ✗ | FK zu Tenant (NULL für interne User) |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP-System |
+| `email` | `VARCHAR(255)` | ✓ | E-Mail-Adresse (unique) |
+| `first_name` | `VARCHAR(100)` | ✓ | Vorname |
+| `last_name` | `VARCHAR(100)` | ✓ | Nachname |
+| `role` | `ENUM` | ✓ | Rolle: `SYSTEM_ADMIN`, `PROJEKTLEITER`, `INNENDIENST`, `MULTIPLIKATOR_ADMIN`, `MULTIPLIKATOR_USER`, `SACHVERSTAENDIGER` |
+| `phone` | `VARCHAR(50)` | ✗ | Telefonnummer |
+| `avatar_url` | `VARCHAR(500)` | ✗ | Profilbild-URL |
+| `is_active` | `BOOLEAN` | ✓ | Aktiv-Status (Default: `true`) |
+| `notification_preferences` | `JSONB` | ✗ | Benachrichtigungseinstellungen |
+| `last_login_at` | `TIMESTAMP` | ✗ | Letzter Login |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `tenant` | n:1 | Tenant | Zugehöriger Mandant |
+| `assigned_claims` | n:m | Claim | Zugewiesene Schäden (via ClaimAssignment) |
+| `comments` | 1:n | Comment | Verfasste Kommentare |
+| `notifications` | 1:n | Notification | Empfangene Benachrichtigungen |
+| `events_created` | 1:n | Event | Erstellte Timeline-Einträge |
+
+---
+
+## 3. Claim
+
+**Zweck:** Kernentität – repräsentiert einen Schadenfall. Enthält alle schadenbezogenen Stammdaten.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `tenant_id` | `UUID` | ✓ | FK zu Tenant |
+| `property_id` | `UUID` | ✗ | FK zu Property |
+| `external_id` | `VARCHAR(100)` | ✗ | Projektnummer im ERP |
+| `claim_number` | `VARCHAR(50)` | ✓ | Schadenradar-Schadennummer (unique) |
+| `insurance_claim_number` | `VARCHAR(100)` | ✗ | Versicherungs-Schadennummer |
+| `title` | `VARCHAR(255)` | ✓ | Kurzbeschreibung des Schadens |
+| `description` | `TEXT` | ✗ | Ausführliche Beschreibung |
+| `damage_type` | `ENUM` | ✓ | Schadensart: `WASSERSCHADEN`, `BRANDSCHADEN`, `STURMSCHADEN`, `SCHIMMEL`, `SONSTIGE` |
+| `damage_cause` | `VARCHAR(255)` | ✗ | Schadensursache |
+| `damage_date` | `DATE` | ✗ | Schadensdatum |
+| `reported_date` | `DATE` | ✓ | Meldedatum |
+| `address_street` | `VARCHAR(255)` | ✓ | Schadenort Straße |
+| `address_zip` | `VARCHAR(10)` | ✓ | Schadenort PLZ |
+| `address_city` | `VARCHAR(100)` | ✓ | Schadenort Stadt |
+| `address_floor` | `VARCHAR(50)` | ✗ | Etage/Stockwerk |
+| `address_unit` | `VARCHAR(50)` | ✗ | Wohnungs-/Einheitsnummer |
+| `geo_lat` | `DECIMAL(10,7)` | ✗ | Breitengrad (für Karte) |
+| `geo_lng` | `DECIMAL(10,7)` | ✗ | Längengrad (für Karte) |
+| `current_phase` | `ENUM` | ✓ | Aktuelle Hauptphase |
+| `current_status` | `ENUM` | ✓ | Aktueller Status innerhalb der Phase |
+| `priority` | `ENUM` | ✓ | Priorität: `NIEDRIG`, `NORMAL`, `HOCH`, `KRITISCH` |
+| `is_archived` | `BOOLEAN` | ✓ | Archiviert (Default: `false`) |
+| `closed_at` | `TIMESTAMP` | ✗ | Abschlussdatum |
+| `erp_last_sync` | `TIMESTAMP` | ✗ | Letzte ERP-Synchronisation |
+| `metadata` | `JSONB` | ✗ | Zusätzliche ERP-Daten |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `tenant` | n:1 | Tenant | Zugehöriger Mandant |
+| `property` | n:1 | Property | Betroffenes Objekt |
+| `phases` | 1:n | ClaimPhase | Phasen des Schadens |
+| `events` | 1:n | Event | Timeline-Einträge |
+| `calendar_items` | 1:n | CalendarItem | Termine |
+| `documents` | 1:n | Document | Dokumente |
+| `document_folders` | 1:n | DocumentFolder | Ordnerstruktur |
+| `offers` | 1:n | Offer | Angebote |
+| `invoices` | 1:n | Invoice | Rechnungen |
+| `comments` | 1:n | Comment | Kommentare |
+| `contacts` | n:m | Contact | Beteiligte Kontakte (via ClaimContact) |
+| `assigned_users` | n:m | User | Zugewiesene Bearbeiter (via ClaimAssignment) |
+
+---
+
+## 4. Property
+
+**Zweck:** Gebäude oder Objekt, an dem ein Schaden aufgetreten ist. Ermöglicht Wiederverwendung bei mehreren Schäden am selben Objekt.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `tenant_id` | `UUID` | ✓ | FK zu Tenant |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP-System |
+| `name` | `VARCHAR(255)` | ✗ | Objektbezeichnung |
+| `property_type` | `ENUM` | ✓ | Typ: `MEHRFAMILIENHAUS`, `EINFAMILIENHAUS`, `GEWERBE`, `OEFFENTLICH`, `SONSTIGE` |
+| `address_street` | `VARCHAR(255)` | ✓ | Straße und Hausnummer |
+| `address_zip` | `VARCHAR(10)` | ✓ | Postleitzahl |
+| `address_city` | `VARCHAR(100)` | ✓ | Stadt |
+| `geo_lat` | `DECIMAL(10,7)` | ✗ | Breitengrad |
+| `geo_lng` | `DECIMAL(10,7)` | ✗ | Längengrad |
+| `unit_count` | `INTEGER` | ✗ | Anzahl Wohneinheiten |
+| `construction_year` | `INTEGER` | ✗ | Baujahr |
+| `notes` | `TEXT` | ✗ | Bemerkungen |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `tenant` | n:1 | Tenant | Zugehöriger Mandant |
+| `claims` | 1:n | Claim | Schäden an diesem Objekt |
+
+---
+
+## 5. Contact
+
+**Zweck:** Ansprechpartner im Kontext eines Schadens (Mieter, Hausmeister, Versicherungskontakt, etc.).
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `tenant_id` | `UUID` | ✓ | FK zu Tenant |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP-System |
+| `contact_type` | `ENUM` | ✓ | Typ: `MIETER`, `EIGENTUEMER`, `HAUSMEISTER`, `VERSICHERUNG`, `SACHVERSTAENDIGER`, `SONSTIGE` |
+| `salutation` | `ENUM` | ✗ | Anrede: `HERR`, `FRAU`, `DIVERS`, `FIRMA` |
+| `first_name` | `VARCHAR(100)` | ✗ | Vorname |
+| `last_name` | `VARCHAR(100)` | ✓ | Nachname / Firmenname |
+| `company` | `VARCHAR(255)` | ✗ | Firma (falls natürliche Person) |
+| `email` | `VARCHAR(255)` | ✗ | E-Mail-Adresse |
+| `phone` | `VARCHAR(50)` | ✗ | Telefonnummer |
+| `phone_mobile` | `VARCHAR(50)` | ✗ | Mobilnummer |
+| `address_street` | `VARCHAR(255)` | ✗ | Straße |
+| `address_zip` | `VARCHAR(10)` | ✗ | PLZ |
+| `address_city` | `VARCHAR(100)` | ✗ | Stadt |
+| `notes` | `TEXT` | ✗ | Bemerkungen |
+| `is_active` | `BOOLEAN` | ✓ | Aktiv-Status (Default: `true`) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `tenant` | n:1 | Tenant | Zugehöriger Mandant |
+| `claims` | n:m | Claim | Zugeordnete Schäden (via ClaimContact) |
+
+---
+
+## 6. ClaimPhase
+
+**Zweck:** Repräsentiert eine der 5 Hauptphasen eines Schadens mit eigenem Status und Fortschritt.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `phase_type` | `ENUM` | ✓ | Phase: `LECKORTUNG`, `LECKAGE_BEHEBUNG`, `RUECKBAU`, `TROCKNUNG`, `WIEDERHERSTELLUNG` |
+| `status` | `ENUM` | ✓ | Portal-Status (siehe PhaseStatus ENUM) |
+| `erp_substatus` | `VARCHAR(100)` | ✗ | Detaillierter ERP-Substatus |
+| `sequence` | `INTEGER` | ✓ | Reihenfolge (1-5) |
+| `is_applicable` | `BOOLEAN` | ✓ | Phase relevant für diesen Schaden (Default: `true`) |
+| `is_skipped` | `BOOLEAN` | ✓ | Phase übersprungen (Default: `false`) |
+| `started_at` | `TIMESTAMP` | ✗ | Startdatum der Phase |
+| `completed_at` | `TIMESTAMP` | ✗ | Abschlussdatum der Phase |
+| `notes` | `TEXT` | ✗ | Interne Notizen |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### PhaseStatus ENUM-Werte
+
+| Wert | Beschreibung | ERP-Mapping (Beispiele) |
+|------|--------------|-------------------------|
+| `NICHT_BEGONNEN` | Phase noch nicht gestartet | - |
+| `TERMIN_OFFEN` | Termin noch nicht geplant | `ORTSTERMIN_OFFEN` |
+| `TERMIN_GEPLANT` | Termin beauftragt | `ORTSTERMIN_BEAUFTRAGT` |
+| `VOR_ORT_ERFOLGT` | Einsatz durchgeführt | `ORTSTERMIN_ERFOLGT` |
+| `DOKUMENTATION` | Bericht/Protokoll/Angebot wird erstellt | `PROTOKOLLERSTELLUNG`, `ANGEBOTSERSTELLUNG` |
+| `FREIGABE_AUSSTEHEND` | Wartet auf Prüfung/Freigabe | `ANGEBOT_ERSTELLT`, `ANGEBOT_GEPRUEFT`, `ANGEBOT_KORREKTUR`, `ANGEBOT_VERSENDET` |
+| `IN_DURCHFUEHRUNG` | Arbeiten laufen | `DURCHFUEHRUNG` |
+| `ABNAHME` | Abnahme/Prüfung | `ABNAHME_OFFEN`, `ABNAHME_ERFOLGT` |
+| `ABRECHNUNG` | Rechnung in Bearbeitung | `RECHNUNGSERSTELLUNG`, `RECHNUNG_ERSTELLT`, `RECHNUNG_GEPRUEFT`, `RECHNUNG_KORREKTUR`, `RECHNUNG_VERSENDET` |
+| `ABGESCHLOSSEN` | Phase fertig | `PHASE_ABGESCHLOSSEN` |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+
+---
+
+## 7. Event
+
+**Zweck:** Timeline-Einträge für die Aktivitäten-Ansicht. Protokolliert alle relevanten Ereignisse an einem Schaden.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `user_id` | `UUID` | ✗ | FK zu User (kann System sein) |
+| `event_type` | `ENUM` | ✓ | Ereignistyp (siehe unten) |
+| `event_category` | `ENUM` | ✓ | Kategorie: `STATUS`, `DOKUMENT`, `KOMMUNIKATION`, `TERMIN`, `FINANZEN`, `SYSTEM` |
+| `title` | `VARCHAR(255)` | ✓ | Kurztitel des Ereignisses |
+| `description` | `TEXT` | ✗ | Detaillierte Beschreibung |
+| `reference_type` | `VARCHAR(50)` | ✗ | Referenzierter Entity-Typ |
+| `reference_id` | `UUID` | ✗ | FK zur referenzierten Entity |
+| `metadata` | `JSONB` | ✗ | Zusätzliche strukturierte Daten |
+| `is_visible_to_tenant` | `BOOLEAN` | ✓ | Für Multiplikator sichtbar (Default: `true`) |
+| `event_timestamp` | `TIMESTAMP` | ✓ | Zeitpunkt des Ereignisses |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+
+### EventType ENUM-Werte
+
+| Wert | Beschreibung |
+|------|--------------|
+| `CLAIM_CREATED` | Schaden angelegt |
+| `CLAIM_UPDATED` | Stammdaten geändert |
+| `CLAIM_CLOSED` | Schaden abgeschlossen |
+| `PHASE_CHANGED` | Phasenwechsel |
+| `STATUS_CHANGED` | Statuswechsel |
+| `DOCUMENT_UPLOADED` | Dokument hochgeladen |
+| `DOCUMENT_ASSIGNED` | Dokument zugeordnet (OCR) |
+| `APPOINTMENT_CREATED` | Termin erstellt |
+| `APPOINTMENT_UPDATED` | Termin geändert |
+| `APPOINTMENT_COMPLETED` | Termin durchgeführt |
+| `COMMENT_ADDED` | Kommentar hinzugefügt |
+| `OFFER_CREATED` | Angebot erstellt |
+| `OFFER_STATUS_CHANGED` | Angebotsstatus geändert |
+| `INVOICE_CREATED` | Rechnung erstellt |
+| `INVOICE_STATUS_CHANGED` | Rechnungsstatus geändert |
+| `USER_ASSIGNED` | Bearbeiter zugewiesen |
+| `CONTACT_ADDED` | Kontakt hinzugefügt |
+| `ERP_SYNC` | ERP-Synchronisation |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `user` | n:1 | User | Auslösender Benutzer |
+
+---
+
+## 8. CalendarItem
+
+**Zweck:** Termine im Kontext eines Schadens (Ortstermine, Abnahmen, etc.).
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP-System |
+| `appointment_type` | `ENUM` | ✓ | Typ: `LECKORTUNG`, `BEGEHUNG`, `ABNAHME`, `TROCKNUNG_MESSUNG`, `RUECKBAU`, `WIEDERHERSTELLUNG`, `SONSTIGE` |
+| `title` | `VARCHAR(255)` | ✓ | Terminbezeichnung |
+| `description` | `TEXT` | ✗ | Beschreibung |
+| `start_datetime` | `TIMESTAMP` | ✓ | Start-Zeitpunkt |
+| `end_datetime` | `TIMESTAMP` | ✗ | End-Zeitpunkt |
+| `is_all_day` | `BOOLEAN` | ✓ | Ganztägig (Default: `false`) |
+| `location` | `VARCHAR(255)` | ✗ | Ort (falls abweichend von Schadenort) |
+| `status` | `ENUM` | ✓ | Status: `GEPLANT`, `BESTAETIGT`, `DURCHGEFUEHRT`, `VERSCHOBEN`, `STORNIERT` |
+| `assigned_team` | `VARCHAR(255)` | ✗ | Zuständiges Team/Mitarbeiter |
+| `notes` | `TEXT` | ✗ | Interne Notizen |
+| `is_visible_to_tenant` | `BOOLEAN` | ✓ | Für Multiplikator sichtbar (Default: `true`) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+
+---
+
+## 9. DocumentFolder
+
+**Zweck:** Strukturierte Ordnerhierarchie für die digitale Schadenakte.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `parent_folder_id` | `UUID` | ✗ | FK zu übergeordnetem Ordner |
+| `name` | `VARCHAR(100)` | ✓ | Ordnername |
+| `folder_type` | `ENUM` | ✓ | Typ: `PROTOKOLLE`, `ANGEBOTE`, `RECHNUNGEN`, `FOTOS`, `GUTACHTEN`, `KORRESPONDENZ`, `SONSTIGE`, `CUSTOM` |
+| `sequence` | `INTEGER` | ✓ | Sortierreihenfolge |
+| `is_system_folder` | `BOOLEAN` | ✓ | Systemordner (nicht löschbar) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `parent_folder` | n:1 | DocumentFolder | Übergeordneter Ordner |
+| `child_folders` | 1:n | DocumentFolder | Unterordner |
+| `documents` | 1:n | Document | Dokumente im Ordner |
+
+---
+
+## 10. Document
+
+**Zweck:** Dokument in der digitalen Schadenakte mit OCR-Metadaten und Versionierung.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `folder_id` | `UUID` | ✗ | FK zu DocumentFolder |
+| `external_id` | `VARCHAR(100)` | ✗ | ID im ERP/DMS |
+| `file_name` | `VARCHAR(255)` | ✓ | Original-Dateiname |
+| `display_name` | `VARCHAR(255)` | ✓ | Anzeigename |
+| `file_type` | `VARCHAR(50)` | ✓ | MIME-Type |
+| `file_size` | `BIGINT` | ✓ | Dateigröße in Bytes |
+| `storage_path` | `VARCHAR(500)` | ✓ | Pfad in Supabase Storage |
+| `document_type` | `ENUM` | ✓ | Typ: `FOTO`, `PROTOKOLL`, `ANGEBOT`, `RECHNUNG`, `GUTACHTEN`, `KORRESPONDENZ`, `SONSTIGE` |
+| `document_date` | `DATE` | ✗ | Dokumentdatum |
+| `version` | `INTEGER` | ✓ | Versionsnummer (Default: 1) |
+| `previous_version_id` | `UUID` | ✗ | FK zur Vorversion |
+| `ocr_status` | `ENUM` | ✓ | Status: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `NOT_APPLICABLE` |
+| `ocr_confidence` | `DECIMAL(5,2)` | ✗ | OCR-Konfidenz (0-100) |
+| `ocr_extracted_data` | `JSONB` | ✗ | Extrahierte OCR-Daten |
+| `ocr_assignment_status` | `ENUM` | ✓ | Zuordnung: `AUTO_ASSIGNED`, `MANUAL_REQUIRED`, `MANUAL_ASSIGNED`, `NOT_APPLICABLE` |
+| `uploaded_by_user_id` | `UUID` | ✗ | FK zu User (Uploader) |
+| `is_visible_to_tenant` | `BOOLEAN` | ✓ | Für Multiplikator sichtbar (Default: `true`) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `folder` | n:1 | DocumentFolder | Ablageordner |
+| `uploaded_by` | n:1 | User | Hochladender Benutzer |
+| `previous_version` | n:1 | Document | Vorherige Version |
+
+---
+
+## 11. Offer
+
+**Zweck:** Angebot im Rahmen eines Schadensprojekts (aus ERP synchronisiert).
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `claim_phase_id` | `UUID` | ✗ | FK zu ClaimPhase |
+| `external_id` | `VARCHAR(100)` | ✓ | Angebotsnummer im ERP |
+| `offer_number` | `VARCHAR(50)` | ✓ | Angebotsnummer |
+| `title` | `VARCHAR(255)` | ✓ | Angebotstitel |
+| `description` | `TEXT` | ✗ | Beschreibung |
+| `net_amount` | `DECIMAL(12,2)` | ✓ | Nettobetrag |
+| `tax_amount` | `DECIMAL(12,2)` | ✓ | MwSt-Betrag |
+| `gross_amount` | `DECIMAL(12,2)` | ✓ | Bruttobetrag |
+| `currency` | `VARCHAR(3)` | ✓ | Währung (Default: `EUR`) |
+| `status` | `ENUM` | ✓ | Status: `ENTWURF`, `ERSTELLT`, `VERSENDET`, `ANGENOMMEN`, `ABGELEHNT`, `STORNIERT` |
+| `offer_date` | `DATE` | ✓ | Angebotsdatum |
+| `valid_until` | `DATE` | ✗ | Gültig bis |
+| `accepted_at` | `TIMESTAMP` | ✗ | Annahmedatum |
+| `document_id` | `UUID` | ✗ | FK zu Document (PDF) |
+| `erp_last_sync` | `TIMESTAMP` | ✗ | Letzte ERP-Synchronisation |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `claim_phase` | n:1 | ClaimPhase | Zugehörige Phase |
+| `document` | n:1 | Document | Angebots-PDF |
+
+---
+
+## 12. Invoice
+
+**Zweck:** Rechnung im Rahmen eines Schadensprojekts (aus ERP synchronisiert).
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `claim_phase_id` | `UUID` | ✗ | FK zu ClaimPhase |
+| `offer_id` | `UUID` | ✗ | FK zu Offer (falls aus Angebot) |
+| `external_id` | `VARCHAR(100)` | ✓ | Rechnungsnummer im ERP |
+| `invoice_number` | `VARCHAR(50)` | ✓ | Rechnungsnummer |
+| `title` | `VARCHAR(255)` | ✓ | Rechnungstitel |
+| `description` | `TEXT` | ✗ | Beschreibung |
+| `net_amount` | `DECIMAL(12,2)` | ✓ | Nettobetrag |
+| `tax_amount` | `DECIMAL(12,2)` | ✓ | MwSt-Betrag |
+| `gross_amount` | `DECIMAL(12,2)` | ✓ | Bruttobetrag |
+| `currency` | `VARCHAR(3)` | ✓ | Währung (Default: `EUR`) |
+| `status` | `ENUM` | ✓ | Status: `ENTWURF`, `ERSTELLT`, `VERSENDET`, `BEZAHLT`, `MAHNUNG`, `STORNIERT` |
+| `invoice_date` | `DATE` | ✓ | Rechnungsdatum |
+| `due_date` | `DATE` | ✗ | Fälligkeitsdatum |
+| `paid_at` | `TIMESTAMP` | ✗ | Zahlungsdatum |
+| `paid_amount` | `DECIMAL(12,2)` | ✗ | Bezahlter Betrag |
+| `document_id` | `UUID` | ✗ | FK zu Document (PDF) |
+| `erp_last_sync` | `TIMESTAMP` | ✗ | Letzte ERP-Synchronisation |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `claim_phase` | n:1 | ClaimPhase | Zugehörige Phase |
+| `offer` | n:1 | Offer | Zugehöriges Angebot |
+| `document` | n:1 | Document | Rechnungs-PDF |
+
+---
+
+## 13. Comment
+
+**Zweck:** Kommentare/Nachrichten am Schaden für die direkte Kommunikation.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `thread_id` | `UUID` | ✗ | FK zu Parent-Comment (für Threads) |
+| `user_id` | `UUID` | ✓ | FK zu User (Autor) |
+| `content` | `TEXT` | ✓ | Kommentartext |
+| `is_internal` | `BOOLEAN` | ✓ | Nur intern sichtbar (Default: `false`) |
+| `is_edited` | `BOOLEAN` | ✓ | Wurde bearbeitet (Default: `false`) |
+| `edited_at` | `TIMESTAMP` | ✗ | Zeitpunkt der Bearbeitung |
+| `is_deleted` | `BOOLEAN` | ✓ | Soft-Delete (Default: `false`) |
+| `deleted_at` | `TIMESTAMP` | ✗ | Zeitpunkt der Löschung |
+| `mentions` | `UUID[]` | ✗ | Array von erwähnten User-IDs |
+| `attachments` | `JSONB` | ✗ | Anhänge (Referenzen zu Documents) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+| `user` | n:1 | User | Autor |
+| `parent_thread` | n:1 | Comment | Übergeordneter Kommentar |
+| `replies` | 1:n | Comment | Antworten |
+
+---
+
+## 14. Notification
+
+**Zweck:** Systembenachrichtigungen für Benutzer.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `user_id` | `UUID` | ✓ | FK zu User (Empfänger) |
+| `claim_id` | `UUID` | ✗ | FK zu Claim (falls schadenbezogen) |
+| `notification_type` | `ENUM` | ✓ | Typ: `STATUS_CHANGE`, `NEW_COMMENT`, `MENTION`, `DOCUMENT_ADDED`, `APPOINTMENT`, `DEADLINE`, `SYSTEM` |
+| `title` | `VARCHAR(255)` | ✓ | Titel |
+| `message` | `TEXT` | ✓ | Nachrichtentext |
+| `action_url` | `VARCHAR(500)` | ✗ | Link zum Ziel |
+| `reference_type` | `VARCHAR(50)` | ✗ | Referenzierter Entity-Typ |
+| `reference_id` | `UUID` | ✗ | FK zur referenzierten Entity |
+| `is_read` | `BOOLEAN` | ✓ | Gelesen (Default: `false`) |
+| `read_at` | `TIMESTAMP` | ✗ | Lesezeitpunkt |
+| `is_email_sent` | `BOOLEAN` | ✓ | E-Mail versendet (Default: `false`) |
+| `email_sent_at` | `TIMESTAMP` | ✗ | E-Mail-Versandzeitpunkt |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+
+### Beziehungen
+
+| Beziehung | Typ | Ziel-Entity | Beschreibung |
+|-----------|-----|-------------|--------------|
+| `user` | n:1 | User | Empfänger |
+| `claim` | n:1 | Claim | Zugehöriger Schaden |
+
+---
+
+## 15. IntegrationMapping
+
+**Zweck:** Mapping zwischen Schadenradar-Entitäten und externen Systemen (ERP) für Synchronisation.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `integration_type` | `ENUM` | ✓ | Integrationstyp: `ERP`, `OCR`, `STORAGE` |
+| `entity_type` | `VARCHAR(50)` | ✓ | Lokaler Entity-Typ |
+| `entity_id` | `UUID` | ✓ | Lokale Entity-ID |
+| `external_system` | `VARCHAR(100)` | ✓ | Name des externen Systems |
+| `external_entity_type` | `VARCHAR(100)` | ✓ | Entity-Typ im externen System |
+| `external_id` | `VARCHAR(255)` | ✓ | ID im externen System |
+| `external_url` | `VARCHAR(500)` | ✗ | URL im externen System |
+| `sync_direction` | `ENUM` | ✓ | Richtung: `INBOUND`, `OUTBOUND`, `BIDIRECTIONAL` |
+| `last_sync_at` | `TIMESTAMP` | ✗ | Letzte Synchronisation |
+| `last_sync_status` | `ENUM` | ✓ | Status: `SUCCESS`, `FAILED`, `PENDING` |
+| `last_sync_error` | `TEXT` | ✗ | Fehlermeldung |
+| `sync_metadata` | `JSONB` | ✗ | Zusätzliche Sync-Daten |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMP` | ✓ | Letztes Update |
+
+### Unique Constraint
+
+```sql
+UNIQUE (integration_type, entity_type, entity_id, external_system)
+```
+
+---
+
+## 16. ClaimAssignment (Junction Table)
+
+**Zweck:** Zuordnung von Benutzern zu Schäden (Bearbeiter, Verantwortliche).
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `user_id` | `UUID` | ✓ | FK zu User |
+| `role` | `ENUM` | ✓ | Rolle: `PROJEKTLEITER`, `BEARBEITER`, `BEOBACHTER` |
+| `assigned_at` | `TIMESTAMP` | ✓ | Zuordnungszeitpunkt |
+| `assigned_by_user_id` | `UUID` | ✗ | FK zu User (wer hat zugewiesen) |
+| `is_active` | `BOOLEAN` | ✓ | Aktiv (Default: `true`) |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+
+### Unique Constraint
+
+```sql
+UNIQUE (claim_id, user_id, role)
+```
+
+---
+
+## 17. ClaimContact (Junction Table)
+
+**Zweck:** Zuordnung von Kontakten zu Schäden mit spezifischer Rolle.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `claim_id` | `UUID` | ✓ | FK zu Claim |
+| `contact_id` | `UUID` | ✓ | FK zu Contact |
+| `role_in_claim` | `ENUM` | ✓ | Rolle: `GESCHAEDIGTER`, `ANSPRECHPARTNER`, `HAUSMEISTER`, `VERSICHERUNGSNEHMER`, `SONSTIGE` |
+| `is_primary` | `BOOLEAN` | ✓ | Hauptansprechpartner (Default: `false`) |
+| `notes` | `TEXT` | ✗ | Bemerkungen |
+| `created_at` | `TIMESTAMP` | ✓ | Erstellungszeitpunkt |
+
+### Unique Constraint
+
+```sql
+UNIQUE (claim_id, contact_id, role_in_claim)
+```
+
+---
+
+## 18. AuditLog
+
+**Zweck:** Revisionssicheres Logging aller Datenänderungen für Compliance.
+
+### Felder
+
+| Name | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `UUID` | ✓ | Primärschlüssel |
+| `entity_type` | `VARCHAR(50)` | ✓ | Betroffener Entity-Typ |
+| `entity_id` | `UUID` | ✓ | Betroffene Entity-ID |
+| `action` | `ENUM` | ✓ | Aktion: `CREATE`, `UPDATE`, `DELETE`, `ACCESS` |
+| `user_id` | `UUID` | ✗ | FK zu User (NULL bei System) |
+| `tenant_id` | `UUID` | ✗ | FK zu Tenant |
+| `old_values` | `JSONB` | ✗ | Werte vor Änderung |
+| `new_values` | `JSONB` | ✗ | Werte nach Änderung |
+| `changed_fields` | `TEXT[]` | ✗ | Liste geänderter Felder |
+| `ip_address` | `INET` | ✗ | IP-Adresse |
+| `user_agent` | `TEXT` | ✗ | Browser/Client Info |
+| `created_at` | `TIMESTAMP` | ✓ | Zeitstempel |
+
+---
+
+# Entity-Relationship-Diagramm
+
+```
+┌─────────────┐     ┌─────────────┐
+│   Tenant    │────<│    User     │
+└─────────────┘     └─────────────┘
+       │                   │
+       │                   │ (via ClaimAssignment)
+       ▼                   ▼
+┌─────────────┐     ┌─────────────┐
+│  Property   │────<│    Claim    │>────┬─────────────────┬─────────────────┐
+└─────────────┘     └─────────────┘     │                 │                 │
+                           │            ▼                 ▼                 ▼
+                           │     ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+                           │     │ ClaimPhase  │   │   Comment   │   │    Event    │
+                           │     └─────────────┘   └─────────────┘   └─────────────┘
+                           │
+         ┌─────────────────┼─────────────────┬─────────────────┐
+         ▼                 ▼                 ▼                 ▼
+  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+  │CalendarItem │   │DocumentFolder│   │    Offer    │   │   Invoice   │
+  └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  Document   │
+                    └─────────────┘
+
+┌─────────────┐                       ┌─────────────────┐
+│   Contact   │<──(via ClaimContact)──│ IntegrationMapping│
+└─────────────┘                       └─────────────────┘
+       │
+       └────> (Tenant-Kontext)
+
+┌─────────────┐     ┌─────────────┐
+│Notification │────>│    User     │
+└─────────────┘     └─────────────┘
+
+┌─────────────┐
+│  AuditLog   │ (alle Entities)
+└─────────────┘
+```
+
+---
+
+# Business Rules
+
+## 1. Mandantenfähigkeit (Multi-Tenancy)
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-MT-001** | Jeder `Claim`, `Property`, `Contact`, `Document` **muss** einem `Tenant` zugeordnet sein |
+| **BR-MT-002** | Benutzer mit Rolle `MULTIPLIKATOR_*` sehen **ausschließlich** Daten ihres eigenen Tenants |
+| **BR-MT-003** | Row-Level-Security (RLS) **muss** auf DB-Ebene für alle tenant-bezogenen Tabellen aktiviert sein |
+| **BR-MT-004** | Interne Benutzer (`SYSTEM_ADMIN`, `PROJEKTLEITER`, `INNENDIENST`) haben `tenant_id = NULL` und können tenant-übergreifend arbeiten |
+| **BR-MT-005** | Cross-Tenant-Zugriff ist nur über explizite Admin-Funktionen möglich |
+
+## 2. Claim-Validierungen
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-CL-001** | `claim_number` ist systemweit **unique** |
+| **BR-CL-002** | `reported_date` darf nicht in der Zukunft liegen |
+| **BR-CL-003** | `damage_date` (falls gesetzt) muss ≤ `reported_date` sein |
+| **BR-CL-004** | Ein Claim muss mindestens **eine aktive ClaimPhase** haben |
+| **BR-CL-005** | `current_phase` und `current_status` müssen mit der aktiven `ClaimPhase` konsistent sein |
+| **BR-CL-006** | Archivierte Claims (`is_archived = true`) sind read-only für Multiplikatoren |
+| **BR-CL-007** | Adressfelder (`address_street`, `address_zip`, `address_city`) sind Pflicht |
+
+## 3. Phasen-Workflow
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-PH-001** | Jeder neue Claim erhält automatisch **5 ClaimPhase-Einträge** (eine pro Hauptphase) |
+| **BR-PH-002** | Phasen haben eine feste `sequence` (1-5), die nicht änderbar ist |
+| **BR-PH-003** | Eine Phase kann nur `ABGESCHLOSSEN` werden, wenn alle Pflichtaktivitäten erledigt sind |
+| **BR-PH-004** | Nicht-relevante Phasen können mit `is_applicable = false` oder `is_skipped = true` übersprungen werden |
+| **BR-PH-005** | Status-Übergänge folgen einer definierten Reihenfolge (State Machine): |
+
+```
+NICHT_BEGONNEN → TERMIN_OFFEN → TERMIN_GEPLANT → VOR_ORT_ERFOLGT 
+→ DOKUMENTATION → FREIGABE_AUSSTEHEND → IN_DURCHFUEHRUNG 
+→ ABNAHME → ABRECHNUNG → ABGESCHLOSSEN
+```
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-PH-006** | Nicht alle Status sind für jede Phase verpflichtend, aber die Reihenfolge muss eingehalten werden |
+
+## 4. Dokumente & OCR
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-DOC-001** | Jedes hochgeladene Dokument erhält initial `ocr_status = PENDING` (falls text-basiert) |
+| **BR-DOC-002** | Bei `ocr_confidence < 70%` wird `ocr_assignment_status = MANUAL_REQUIRED` gesetzt |
+| **BR-DOC-003** | Dokumente ohne Claim-Zuordnung werden in einen Posteingang-Ordner verschoben |
+| **BR-DOC-004** | Bei Versionierung: Vorversion wird referenziert via `previous_version_id`, `version` wird inkrementiert |
+| **BR-DOC-005** | Gelöschte Dokumente werden nur soft-deleted (Storage bleibt für 90 Tage) |
+| **BR-DOC-006** | Systemordner (`is_system_folder = true`) können nicht gelöscht werden |
+
+## 5. Finanzen (Angebote/Rechnungen)
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-FIN-001** | `gross_amount` = `net_amount` + `tax_amount` (Validierung bei Sync) |
+| **BR-FIN-002** | Angebote/Rechnungen werden **nur vom ERP synchronisiert** (read-only in Schadenradar) |
+| **BR-FIN-003** | `paid_amount` ≤ `gross_amount` |
+| **BR-FIN-004** | Beträge werden für Multiplikatoren **nie detailliert** angezeigt (nur Status) |
+| **BR-FIN-005** | Nur SüdWest-Mitarbeiter sehen Betragsfelder |
+
+## 6. Kommentare & Kommunikation
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-COM-001** | Kommentare mit `is_internal = true` sind nur für SüdWest-Mitarbeiter sichtbar |
+| **BR-COM-002** | Bearbeitete Kommentare müssen `is_edited = true` und `edited_at` setzen |
+| **BR-COM-003** | Gelöschte Kommentare werden soft-deleted; Inhalt wird für andere durch Platzhalter ersetzt |
+| **BR-COM-004** | Erwähnungen (Mentions) in `mentions[]` lösen eine Notification aus |
+
+## 7. Benachrichtigungen
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-NOT-001** | Benachrichtigungen werden nur erstellt, wenn `notification_preferences` des Users dies erlaubt |
+| **BR-NOT-002** | E-Mail-Versand erfolgt asynchron; `is_email_sent` wird erst nach erfolgreichem Versand gesetzt |
+| **BR-NOT-003** | Notifications werden nach 90 Tagen automatisch archiviert/gelöscht |
+
+## 8. ERP-Integration
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-ERP-001** | ERP ist **führendes System** (Source of Truth) für: Claims, Offers, Invoices, Kontakte, Status |
+| **BR-ERP-002** | Änderungen in Schadenradar, die ERP-Daten betreffen, werden **nicht** zurück synchronisiert |
+| **BR-ERP-003** | Jede ERP-Sync-Aktion erstellt einen Event mit `event_type = ERP_SYNC` |
+| **BR-ERP-004** | Bei Sync-Konflikten gewinnt immer der ERP-Wert |
+| **BR-ERP-005** | `external_id` in Entities muss zur korrespondierenden ERP-ID eindeutig sein |
+
+## 9. Audit & Compliance
+
+| Regel | Beschreibung |
+|-------|--------------|
+| **BR-AUD-001** | Jede CREATE/UPDATE/DELETE-Operation **muss** einen AuditLog-Eintrag erzeugen |
+| **BR-AUD-002** | AuditLog-Einträge sind **unveränderlich** (kein UPDATE, kein DELETE) |
+| **BR-AUD-003** | Personenbezogene Daten in AuditLogs werden nach 10 Jahren anonymisiert (DSGVO) |
+
+---
+
+# Glossar
+
+| Begriff | Definition |
+|---------|------------|
+| **Claim** | Ein Schadenfall/Schadensprojekt, das von SüdWest Sanierung bearbeitet wird |
+| **Tenant** | Mandant – eine Multiplikator-Organisation, die Schäden meldet und verfolgt |
+| **Multiplikator** | Externe Partner (Hausverwaltungen, Versicherungen, etc.), die Schäden melden |
+| **Phase** | Eine der 5 Hauptphasen eines Schadensprojekts: Leckortung, Leckagebehebung, Rückbau, Trocknung, Wiederherstellung |
+| **Status** | Der aktuelle Bearbeitungsstand innerhalb einer Phase (9 einheitliche Status-Werte) |
+| **Property** | Ein Gebäude/Objekt, an dem ein Schaden aufgetreten ist |
+| **Contact** | Ein Ansprechpartner im Kontext eines Schadens (Mieter, Hausmeister, etc.) |
+| **Event** | Ein Timeline-Eintrag, der eine Aktivität/Änderung am Schaden protokolliert |
+| **CalendarItem** | Ein Termin im Zusammenhang mit einem Schaden |
+| **DocumentFolder** | Ein Ordner in der strukturierten digitalen Schadenakte |
+| **Document** | Ein Dokument (PDF, Bild, etc.) in der digitalen Schadenakte |
+| **Offer** | Ein Angebot für Arbeiten im Rahmen eines Schadenprojekts |
+| **Invoice** | Eine Rechnung für durchgeführte Arbeiten |
+| **Comment** | Ein Kommentar/Nachricht am Schaden zur direkten Kommunikation |
+| **Thread** | Eine Kette von zusammengehörigen Kommentaren (Antworten) |
+| **Notification** | Eine Systembenachrichtigung an einen Benutzer |
+| **OCR** | Optical Character Recognition – automatische Texterkennung in Dokumenten |
+| **OCR-Confidence** | Prozentwert, der die Zuverlässigkeit der OCR-Erkennung angibt |
+| **IntegrationMapping** | Zuordnung zwischen Schadenradar-Entitäten und externen System-IDs |
+| **ERP** | Enterprise Resource Planning – das führende System für Stammdaten und Finanzen |
+| **RLS** | Row-Level Security – Datenbankebene Zugriffssteuerung pro Zeile |
+| **Soft-Delete** | Logisches Löschen durch Setzen eines Flags (Daten bleiben erhalten) |
+| **Audit Trail** | Lückenlose Protokollierung aller Datenänderungen |
+| **Source of Truth** | Das führende System, dessen Daten bei Konflikten gelten |
+
+---
+
+## ENUM-Werte Übersicht
+
+<details>
+<summary><b>Alle ENUM-Definitionen aufklappen</b></summary>
+
+### TenantType
+```sql
+CREATE TYPE tenant_type AS ENUM (
+  'HAUSVERWALTUNG', 'VERSICHERUNG', 'MAKLER', 'REGULIERER',
+  'SACHVERSTAENDIGER', 'KOMMUNE', 'BAUBIOLOGE', 'SONSTIGE'
+);
+```
+
+### UserRole
+```sql
+CREATE TYPE user_role AS ENUM (
+  'SYSTEM_ADMIN', 'PROJEKTLEITER', 'INNENDIENST',
+  'MULTIPLIKATOR_ADMIN', 'MULTIPLIKATOR_USER', 'SACHVERSTAENDIGER'
+);
+```
+
+### DamageType
+```sql
+CREATE TYPE damage_type AS ENUM (
+  'WASSERSCHADEN', 'BRANDSCHADEN', 'STURMSCHADEN', 'SCHIMMEL', 'SONSTIGE'
+);
+```
+
+### PhaseType
+```sql
+CREATE TYPE phase_type AS ENUM (
+  'LECKORTUNG', 'LECKAGE_BEHEBUNG', 'RUECKBAU', 'TROCKNUNG', 'WIEDERHERSTELLUNG'
+);
+```
+
+### PhaseStatus
+```sql
+CREATE TYPE phase_status AS ENUM (
+  'NICHT_BEGONNEN', 'TERMIN_OFFEN', 'TERMIN_GEPLANT', 'VOR_ORT_ERFOLGT',
+  'DOKUMENTATION', 'FREIGABE_AUSSTEHEND', 'IN_DURCHFUEHRUNG',
+  'ABNAHME', 'ABRECHNUNG', 'ABGESCHLOSSEN'
+);
+```
+
+### Priority
+```sql
+CREATE TYPE priority AS ENUM (
+  'NIEDRIG', 'NORMAL', 'HOCH', 'KRITISCH'
+);
+```
+
+### PropertyType
+```sql
+CREATE TYPE property_type AS ENUM (
+  'MEHRFAMILIENHAUS', 'EINFAMILIENHAUS', 'GEWERBE', 'OEFFENTLICH', 'SONSTIGE'
+);
+```
+
+### ContactType
+```sql
+CREATE TYPE contact_type AS ENUM (
+  'MIETER', 'EIGENTUEMER', 'HAUSMEISTER', 'VERSICHERUNG',
+  'SACHVERSTAENDIGER', 'SONSTIGE'
+);
+```
+
+### Salutation
+```sql
+CREATE TYPE salutation AS ENUM (
+  'HERR', 'FRAU', 'DIVERS', 'FIRMA'
+);
+```
+
+### EventType
+```sql
+CREATE TYPE event_type AS ENUM (
+  'CLAIM_CREATED', 'CLAIM_UPDATED', 'CLAIM_CLOSED',
+  'PHASE_CHANGED', 'STATUS_CHANGED',
+  'DOCUMENT_UPLOADED', 'DOCUMENT_ASSIGNED',
+  'APPOINTMENT_CREATED', 'APPOINTMENT_UPDATED', 'APPOINTMENT_COMPLETED',
+  'COMMENT_ADDED',
+  'OFFER_CREATED', 'OFFER_STATUS_CHANGED',
+  'INVOICE_CREATED', 'INVOICE_STATUS_CHANGED',
+  'USER_ASSIGNED', 'CONTACT_ADDED', 'ERP_SYNC'
+);
+```
+
+### EventCategory
+```sql
+CREATE TYPE event_category AS ENUM (
+  'STATUS', 'DOKUMENT', 'KOMMUNIKATION', 'TERMIN', 'FINANZEN', 'SYSTEM'
+);
+```
+
+### AppointmentType
+```sql
+CREATE TYPE appointment_type AS ENUM (
+  'LECKORTUNG', 'BEGEHUNG', 'ABNAHME', 'TROCKNUNG_MESSUNG',
+  'RUECKBAU', 'WIEDERHERSTELLUNG', 'SONSTIGE'
+);
+```
+
+### AppointmentStatus
+```sql
+CREATE TYPE appointment_status AS ENUM (
+  'GEPLANT', 'BESTAETIGT', 'DURCHGEFUEHRT', 'VERSCHOBEN', 'STORNIERT'
+);
+```
+
+### FolderType
+```sql
+CREATE TYPE folder_type AS ENUM (
+  'PROTOKOLLE', 'ANGEBOTE', 'RECHNUNGEN', 'FOTOS',
+  'GUTACHTEN', 'KORRESPONDENZ', 'SONSTIGE', 'CUSTOM'
+);
+```
+
+### DocumentType
+```sql
+CREATE TYPE document_type AS ENUM (
+  'FOTO', 'PROTOKOLL', 'ANGEBOT', 'RECHNUNG', 'GUTACHTEN',
+  'KORRESPONDENZ', 'SONSTIGE'
+);
+```
+
+### OcrStatus
+```sql
+CREATE TYPE ocr_status AS ENUM (
+  'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'NOT_APPLICABLE'
+);
+```
+
+### OcrAssignmentStatus
+```sql
+CREATE TYPE ocr_assignment_status AS ENUM (
+  'AUTO_ASSIGNED', 'MANUAL_REQUIRED', 'MANUAL_ASSIGNED', 'NOT_APPLICABLE'
+);
+```
+
+### OfferStatus
+```sql
+CREATE TYPE offer_status AS ENUM (
+  'ENTWURF', 'ERSTELLT', 'VERSENDET', 'ANGENOMMEN', 'ABGELEHNT', 'STORNIERT'
+);
+```
+
+### InvoiceStatus
+```sql
+CREATE TYPE invoice_status AS ENUM (
+  'ENTWURF', 'ERSTELLT', 'VERSENDET', 'BEZAHLT', 'MAHNUNG', 'STORNIERT'
+);
+```
+
+### NotificationType
+```sql
+CREATE TYPE notification_type AS ENUM (
+  'STATUS_CHANGE', 'NEW_COMMENT', 'MENTION', 'DOCUMENT_ADDED',
+  'APPOINTMENT', 'DEADLINE', 'SYSTEM'
+);
+```
+
+### IntegrationType
+```sql
+CREATE TYPE integration_type AS ENUM (
+  'ERP', 'OCR', 'STORAGE'
+);
+```
+
+### SyncDirection
+```sql
+CREATE TYPE sync_direction AS ENUM (
+  'INBOUND', 'OUTBOUND', 'BIDIRECTIONAL'
+);
+```
+
+### SyncStatus
+```sql
+CREATE TYPE sync_status AS ENUM (
+  'SUCCESS', 'FAILED', 'PENDING'
+);
+```
+
+### ClaimAssignmentRole
+```sql
+CREATE TYPE claim_assignment_role AS ENUM (
+  'PROJEKTLEITER', 'BEARBEITER', 'BEOBACHTER'
+);
+```
+
+### ClaimContactRole
+```sql
+CREATE TYPE claim_contact_role AS ENUM (
+  'GESCHAEDIGTER', 'ANSPRECHPARTNER', 'HAUSMEISTER',
+  'VERSICHERUNGSNEHMER', 'SONSTIGE'
+);
+```
+
+### AuditAction
+```sql
+CREATE TYPE audit_action AS ENUM (
+  'CREATE', 'UPDATE', 'DELETE', 'ACCESS'
+);
+```
+
+</details>
