@@ -96,8 +96,15 @@ CREATE TYPE folder_type AS ENUM (
 );
 
 CREATE TYPE document_type AS ENUM (
-  'FOTO', 'PROTOKOLL', 'ANGEBOT', 'RECHNUNG', 'GUTACHTEN',
-  'KORRESPONDENZ', 'SONSTIGE'
+  -- Allgemein
+  'SCHADENMELDUNG', 'VOLLMACHT', 'KORRESPONDENZ', 'FOTO',
+  -- Phase-spezifisch
+  'LO_PROTOKOLL', 'LB_PROTOKOLL', 'TROCKNUNGSPROTOKOLL',
+  'MESSWERTE', 'ABNAHMEPROTOKOLL',
+  -- Finanzdokumente
+  'ANGEBOT', 'RECHNUNG', 'GUTACHTEN',
+  -- Sonstige
+  'SONSTIGES'
 );
 
 CREATE TYPE ocr_status AS ENUM (
@@ -414,7 +421,7 @@ CREATE TABLE documents (
   file_type VARCHAR(100) NOT NULL,
   file_size BIGINT NOT NULL,
   storage_path VARCHAR(500) NOT NULL,
-  document_type document_type NOT NULL DEFAULT 'SONSTIGE',
+  document_type document_type NOT NULL DEFAULT 'SONSTIGES',
   document_date DATE,
   version INTEGER NOT NULL DEFAULT 1,
   previous_version_id UUID REFERENCES documents(id) ON DELETE SET NULL,
